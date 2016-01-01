@@ -21,6 +21,16 @@ rp  .req r11
   bx    r0
 .endm
 
+# push and pop macros
+.macro push reg,sp
+  str   \reg, [\sp, #-4]!
+.endm
+
+.macro pop reg,sp
+  ldr   \reg, [\sp], #4
+.endm
+  
+
 # Some macros to define words and codewords
 # Credit to jonesforth for these macros: 
 # http://git.annexia.org/?p=jonesforth.git;a=blob;f=jonesforth.S;h=45e6e854a5d2a4c3f26af264dfce56379d401425;hb=HEAD

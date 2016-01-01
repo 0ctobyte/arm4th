@@ -5,12 +5,12 @@
 ###############################################################################
 
 defcode "enter",enter
-  str   ip, [rp, #-4]!
+  push  ip, rp
   mov   ip, lr
   next
 
 defcode "exit",exit
-  ldr   ip, [rp], #4
+  pop   ip, rp
   next
 
 defcode "halt",halt
