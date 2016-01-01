@@ -24,7 +24,7 @@ _start:
   movt  org, #0x1
 
   # Set up the stack pointer and return stack
-  ldr   r0, =docol
+  ldr   r0, =enter
   add   r0, r0, org
   sub   r0, r0, #0x1000
   mov   rp, r0

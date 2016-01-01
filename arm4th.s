@@ -34,7 +34,7 @@ name_\label:
 .align 2
 .global \label
 \label:
-xt docol                  // forth words always start with a docol
+xt enter                  // forth words always start with enter
 .endm
 
 # Define code words
@@ -60,11 +60,11 @@ code_\label:
 # FORTH PRIMITIVES                                                            #
 ###############################################################################
 
-# DOCOL is a special word that isn't part of the dictionary
-# DOCOL doesn't have a codeword (i.e. code_docol) or any of the dictionary header
+# ENTER is a special word that isn't part of the dictionary
+# ENTER doesn't have a codeword (i.e. code_docol) or any of the dictionary header
 .align 2
-.global docol
-docol:
+.global enter
+enter:
   str   ip, [rp, #-4]!
   add   ip, r0, #4
   bx    up
