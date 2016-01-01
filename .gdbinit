@@ -1,4 +1,4 @@
-file armforth.elf
+file arm4th.elf
 target remote localhost:1234
 layout asm
 layout reg

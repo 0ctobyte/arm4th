@@ -1,10 +1,11 @@
 #!/bin/bash
 
 QEMU=qemu-system-arm
-BIN="armforth.bin"
+BIN="arm4th.bin"
 QMEM="512M"
 QOPTIONS="-serial stdio"
 QPLATFORM="-M realview-pb-a8"
+# QPLATFORM="-M versatilepb"
 QCPU="cortex-a8"
 QGDB="-s -S"
 
