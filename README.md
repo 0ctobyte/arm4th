@@ -1,6 +1,7 @@
-# ARMv7 Forth kernel/interpreter
+# ARMv7 Forth interpreter
 
-A basic forth interpreter for ARMv7 machines
+A minimal forth interpreter for ARMv7 machines.
+Currently, this interpreter can run barebones on an emulated (using QEMU) Realview Platform Baseboard for Cortex-A8 machine.
 
 # Requirements
 You will need the `arm-none-eabi-gcc` package as well as `qemu` installed on your system.
@@ -10,7 +11,7 @@ You will need the `arm-none-eabi-gcc` package as well as `qemu` installed on you
 `make`
 
 The arm-none-eabi-gcc package must be in your `PATH`.
-The `make` command will produce arm4th.bin.
+The `make` command will produce the binary image file `arm4th.bin`
 
 # Usage
 To run the arm4th binary on qemu:
