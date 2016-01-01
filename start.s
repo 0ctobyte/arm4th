@@ -11,6 +11,11 @@ rp  .req r11
 .text
 .code 32
 
+# Store execution token of forth word in current location
+.macro xt label
+.int \label
+.endm
+
 .global _start
 .align 2
 _start:
@@ -19,7 +24,7 @@ _start:
   movt  org, #0x1
 
   # Set up the stack pointer and return stack
-  ldr   r0, =name_docol
+  ldr   r0, =docol
   add   r0, r0, org
   sub   r0, r0, #0x1000
   mov   rp, r0
@@ -35,21 +40,23 @@ _start:
   ldr   up, =next
   add   up, up, org // add origin offset
   
-  # Finally set the ip to init
-  ldr   ip, =init
-  add   ip, ip, org
+  # Finally set the ip to coldboot
+  ldr   ip, =coldboot
 
   # Go to init!
-  mov   r0, ip
-  add   ip, ip, #4
-  bx    r0 
+  bx    up
+
+coldboot:
+  xt init
 
 .global next
 .align 2
 next: 
-  ldr   r0, [ip], #4
-  add   r0, r0, org
-  bx    r0
+  ldr   r0, [ip, org]
+  add   ip, ip, #4
+  ldr   r1, [r0, org]
+  add   r1, r1, org
+  bx    r1
 
 
 
