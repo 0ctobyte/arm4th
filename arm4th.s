@@ -3,7 +3,13 @@
 defcode "halt",halt
   b     .
 
+# Test sequence!
 defword "init",init
+  _xt lit
+  _xt 9
+  _xt lit
+  _xt 2
+  _xt mod
   _xt exit
 
 ###############################################################################
@@ -236,4 +242,12 @@ defcode "or",or
 defcode "xor",xor
   pop   r0, sp
   eor   tos, r0, tos
+  next
+
+# MISC FORTH WORDS
+
+# Push the value at ip on the stack and increment ip by 4
+defcode "lit",lit
+  push  tos, sp
+  ldr   tos, [ip], #4
   next
