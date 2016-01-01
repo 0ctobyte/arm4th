@@ -4,7 +4,6 @@ defcode "halt",halt
   b     .
 
 defword "init",init
-  _xt div
   _xt exit
 
 ###############################################################################
@@ -142,4 +141,99 @@ defcode "%",mod
   udiv  tos, r0, tos 
   mul   tos, tos, r1
   sub   tos, r0, tos
+  next
+
+# FORTH COMPARISON OPERATORS
+defcode "=",equ
+  pop   r0, sp
+  cmp   r0, tos
+  mov   tos, #0
+  mvneq tos, tos
+  next
+
+defcode "<>",nequ
+  pop   r0, sp
+  cmp   r0, tos
+  mov   tos, #0
+  mvnne tos, tos
+  next
+
+defcode "<",lt
+  pop   r0, sp
+  cmp   r0, tos
+  mov   tos, #0
+  mvnlt tos, tos
+  next
+
+defcode ">",gt
+  pop   r0, sp
+  cmp   r0, tos
+  mov   tos, #0
+  mvngt tos, tos
+  next
+
+defcode "<=",le
+  pop   r0, sp
+  cmp   r0, tos
+  mov   tos, #0
+  mvnle tos, tos
+  next
+
+defcode ">=",ge
+  pop   r0, sp
+  cmp   r0, tos
+  mov   tos, #0
+  mvnge tos, tos
+  next
+
+defcode "0=",zequ
+  cmp   tos, #0
+  mov   tos, #0
+  mvneq tos, tos
+  next
+
+defcode "0<>",znequ
+  cmp   tos, #0
+  mov   tos, #0
+  mvnne tos, tos
+  next
+
+defcode "0<",zlt
+  cmp   tos, #0
+  mov   tos, #0
+  mvnlt tos, tos
+  next
+
+defcode "0>",zgt
+  cmp   tos, #0
+  mov   tos, #0
+  mvngt tos, tos
+  next
+
+defcode "0<=",zle
+  cmp   tos, #0
+  mov   tos, #0
+  mvnle tos, tos
+  next
+
+defcode "0>=",zge
+  cmp   tos, #0
+  mov   tos, #0
+  mvnge tos, tos
+  next
+
+# FORTH BITWISE OPERATORS
+defcode "and",and
+  pop   r0, sp
+  and   tos, r0, tos
+  next
+
+defcode "or",or
+  pop   r0, sp
+  orr   tos, r0, tos
+  next
+
+defcode "xor",xor
+  pop   r0, sp
+  eor   tos, r0, tos
   next
