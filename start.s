@@ -3,6 +3,7 @@
 .text
 .code 32
 
+# Minimal code for coldbooting Forth on an ARMv7 machine
 .global _start
 .align 2
 _start:
@@ -24,12 +25,13 @@ _start:
   mov   tos, r0
 
   # Finally set the ip to coldboot
-  ldr   ip, =coldboot
+  ldr   ip, =startforth
   add   ip, ip, org
 
   # Go to init!
   next
 
-coldboot:
+# Start running the Forth interpreter
+startforth:
   xt init
   xt halt
