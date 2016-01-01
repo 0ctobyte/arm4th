@@ -45,7 +45,6 @@ name_\label:
 12345:
 .ascii "\name"            // name of the word
 12346:
-.byte 0                   // null terminate string
 .align 2
 .global \label
 \label:                   // DTC Forth has a branch to enter as the codeword
@@ -64,7 +63,6 @@ name_\label:
 12345:
 .ascii "\name"            // name of the word
 12346:
-.byte 0                   // null terminate string
 .align 2
 .global \label            // DTC Forth doesn't need a codeword here
 \label:
