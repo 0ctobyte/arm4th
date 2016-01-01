@@ -41,7 +41,10 @@ name_\label:
 .int latest               // link pointer
 .set latest,name_\label   // set link pointer to this word
 .byte \flags              // 1 byte for flags
+.byte (12346f - 12345f)   // 1 byte for length
+12345:
 .ascii "\name"            // name of the word
+12346:
 .byte 0                   // null terminate string
 .align 2
 .global \label
@@ -57,9 +60,13 @@ name_\label:
 .int latest               // link pointer
 .set latest,name_\label   // set link pointer to this word
 .byte \flags              // 1 byte for flags
+.byte (12346f - 12345f)   // 1 byte for length
+12345:
 .ascii "\name"            // name of the word
+12346:
 .byte 0                   // null terminate string
 .align 2
 .global \label            // DTC Forth doesn't need a codeword here
 \label:
 .endm
+
