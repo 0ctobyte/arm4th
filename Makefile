@@ -3,7 +3,7 @@ CC := arm-none-eabi-gcc
 LD := arm-none-eabi-ld
 OBJCOPY := arm-none-eabi-objcopy
 
-PROGRAM := armforth
+PROGRAM := arm4th
 
 C_SRCS := $(wildcard *.c)
 S_SRCS := $(wildcard *.s)

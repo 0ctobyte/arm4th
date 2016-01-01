@@ -7,7 +7,7 @@ SECTIONS
 	.text ALIGN(0x1000) : AT(ADDR(.text)) {
 		start.o(.text)
     . = 0x01000000;
-    armforth.o(.text)
+    *(.text)
 	}
 }
 

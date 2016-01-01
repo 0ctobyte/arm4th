@@ -10,10 +10,10 @@ You will need the `arm-none-eabi-gcc` package as well as `qemu` installed on you
 `make`
 
 The arm-none-eabi-gcc package must be in your `PATH`.
-The `make` command will produce armforth.bin.
+The `make` command will produce arm4th.bin.
 
 # Usage
-To run the armforth binary on qemu:
+To run the arm4th binary on qemu:
 `./emulator -nogdb`
 
 You won't see much now since the forth kernel will halt on boot...
