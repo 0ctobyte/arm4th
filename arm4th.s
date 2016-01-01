@@ -2,7 +2,7 @@
 # org = origin == start address of binary image, used to offset ip tokens
 # up = "user pointer" i.e. points to next
 # rp = return stack pointer
-# ip = "instruction" pointer (r12)
+# ip = "interpreter" pointer (r12)
 tos .req r8
 org .req r9
 up  .req r10
