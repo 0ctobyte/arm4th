@@ -1,6 +1,6 @@
 # ARMv7 Forth interpreter
 
-A minimal forth interpreter for ARMv7 machines.
+A minimal Forth interpreter for ARMv7 machines.
 Currently, this interpreter can run barebones on an emulated (using QEMU) Realview Platform Baseboard for Cortex-A8 machine.
 
 # Requirements
