@@ -4,9 +4,9 @@ QEMU=qemu-system-arm
 BIN="arm4th.bin"
 QMEM="512M"
 QOPTIONS="-serial stdio"
-QPLATFORM="-M realview-pb-a8"
+QPLATFORM="-M vexpress-a15"
 # QPLATFORM="-M versatilepb"
-QCPU="cortex-a8"
+QCPU="cortex-a15"
 QGDB="-s -S"
 
 while test $# -gt 0

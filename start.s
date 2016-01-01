@@ -7,9 +7,9 @@
 .global _start
 .align 2
 _start:
-  # Set origin = 0x10000 since this is where qemu loads the binary image
-  movw  org, #0x0
-  movt  org, #0x1
+  # Set origin = 0x80010000 since this is where qemu loads the binary image
+  movw  org, #0x0000
+  movt  org, #0x8001
 
   # Setup the stack pointer and return stack
   ldr   r0, =name_enter

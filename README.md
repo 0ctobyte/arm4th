@@ -1,7 +1,7 @@
 # ARMv7 Forth interpreter
 
 A minimal Forth interpreter for ARMv7 machines.
-Currently, this interpreter can run barebones on an emulated (using QEMU) Realview Platform Baseboard for Cortex-A8 machine.
+Currently, this interpreter can run barebones on an emulated (using QEMU) Versatile Express board with Cortex-A15 machine.
 
 # Requirements
 You will need the `arm-none-eabi-gcc` package as well as `qemu` installed on your system.
