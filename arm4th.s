@@ -17,5 +17,5 @@ defcode "halt",halt
   b     .
 
 defword "init",init
-  xt exit
+  _xt exit
 

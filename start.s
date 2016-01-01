@@ -33,5 +33,5 @@ _start:
 
 # Start running the Forth interpreter
 startforth:
-  xt init
-  xt halt
+  _xt init
+  _xt halt

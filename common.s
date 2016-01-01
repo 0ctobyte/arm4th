@@ -10,7 +10,7 @@ rp  .req r11
 .set latest,0
 
 # Store execution token of forth word in current location
-.macro xt label
+.macro _xt label
 .int \label
 .endm
 
