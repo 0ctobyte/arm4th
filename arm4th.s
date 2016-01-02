@@ -7,11 +7,13 @@ defcode "halt",halt
 # FORTH PRIMITIVES                                                            #
 ###############################################################################
 
+# Enter a Forth word
 defcode "enter",enter
   push  ip, rp
   mov   ip, lr
   next
 
+# Exit a Forth word
 defcode "exit",exit
   pop   ip, rp
   next
@@ -145,7 +147,7 @@ defcode "%",mod
   sub   tos, r0, tos
   next
 
-# FORTH COMPARISON OPERATORS
+##### FORTH COMPARISON OPERATORS
 defcode "=",equ
   pop   r0, sp
   cmp   r0, tos
@@ -224,7 +226,7 @@ defcode "0>=",zge
   mvnge tos, tos
   next
 
-# FORTH BITWISE OPERATORS
+##### FORTH BITWISE OPERATORS
 defcode "and",and
   pop   r0, sp
   and   tos, r0, tos
@@ -240,7 +242,7 @@ defcode "xor",xor
   eor   tos, r0, tos
   next
 
-# FORTH MEMORY OPERATIONS
+##### FORTH MEMORY OPERATIONS
 defcode "!",store
   pop   r0, sp
   str   r0, [tos]
@@ -300,7 +302,40 @@ LLOOP:
   pop   tos, sp
   next
 
-# STANDARD FORTH VARIABLES & CONSTANTS
+##### RETURN STACK MANIPULATION
+defcode ">r",tor
+  push  tos, rp
+  pop   tos, sp
+  next
+
+defcode "r>",fromr
+  push  tos, sp
+  pop   tos, rp
+  next
+
+defcode "r@",rfetch
+  push  tos, sp
+  ldr   tos, [rp]
+  next
+
+defcode "r!",rstore
+  str   tos, [rp]
+  pop   tos, sp
+  next
+
+##### STACK MANIPULATION
+defcode "sp@",spfetch
+  push  tos, sp
+  mov   tos, sp
+  next
+
+defcode "sp!",spstore
+  mov   r0, tos
+  pop   tos, sp
+  mov   sp, r0
+  next
+
+##### STANDARD FORTH VARIABLES & CONSTANTS
 defvar "latest",latest,name_init  // Last entry in Forth dictionary
 defvar "here",here                // Next free byte in dictionary
 defvar "state",state              // Compile/Interpreter state
