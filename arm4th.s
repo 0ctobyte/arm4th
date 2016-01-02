@@ -1,7 +1,111 @@
-.include "common.s"
+###############################################################################
+# ASSEMBLER MACROS FOR CREATING FORTH DICTIONARY ENTRIES                      #
+###############################################################################
+
+# tos = top of stack
+# up  = "user pointer", points to user area (i.e. data)
+# org = origin == start address of binary image, used to offset ip tokens
+# rp = return stack pointer
+# ip = "interpreter" pointer (r12)
+tos .req r8
+up  .req r9
+org .req r10
+rp  .req r11
+
+# Set the latest entry in the dictionary
+.set link,0
+
+.set __VERSION,1
+.set F_IMMED,0x80
+.set F_HIDDEN,0x40
+
+# Store execution token of forth word in current location
+.macro _xt label
+.int \label
+.endm
+
+# Inline NEXT macro
+.macro next
+  ldr   r0, [ip], #4
+  add   r0, r0, org
+  bx    r0
+.endm
+
+# push and pop macros
+.macro push reg,sp
+  str   \reg, [\sp, #-4]!
+.endm
+
+.macro pop reg,sp
+  ldr   \reg, [\sp], #4
+.endm
+  
+
+# Some macros to define words and codewords
+# Credit to jonesforth for these macros: 
+# http://git.annexia.org/?p=jonesforth.git;a=blob;f=jonesforth.S;h=45e6e854a5d2a4c3f26af264dfce56379d401425;hb=HEAD
+.macro defword name,label,flags=0
+.align 2
+.global name_\label
+name_\label:
+.int link               // link pointer
+.set link,name_\label   // set link pointer to this word
+.byte \flags              // 1 byte for flags
+.byte (12346f - 12345f)   // 1 byte for length
+12345:
+.ascii "\name"            // name of the word
+12346:
+.align 2
+.global \label
+\label:                   // DTC Forth has a branch to enter as the codeword
+bl enter                  // Forth words always start with enter
+.endm
+
+# Define code words
+.macro defcode name,label,flags=0
+.align 2
+.global name_\label
+name_\label:
+.int link               // link pointer
+.set link,name_\label   // set link pointer to this word
+.byte \flags              // 1 byte for flags
+.byte (12346f - 12345f)   // 1 byte for length
+12345:
+.ascii "\name"            // name of the word
+12346:
+.align 2
+.global \label            // DTC Forth doesn't need a codeword here
+\label:
+.endm
+
+# Define a variable
+.macro defvar name,label,initial=0,flags=0
+defcode \name,\label,\flags
+  push  tos, sp
+  add   tos, pc, #0x8
+  next
+.align 2
+var_\label:
+.int \initial
+.endm
+
+# Define a constant
+.macro defconst name,label,value,flags=0
+defcode \name,\label,\flags
+  push  tos, sp
+  ldr   tos, [pc, #0x8]
+  next
+.align 2
+const_\label:
+.int \value
+.endm
 
 .text
 .code 32
+
+###############################################################################
+# START CODE                                                                  #
+###############################################################################
 
 # Minimal code for coldbooting Forth on an ARMv7 machine
 .global _start
@@ -27,7 +131,7 @@ _start:
   movt  r0, #0xdead
   mov   tos, r0
 
-  # Finally set the ip to coldboot
+  # Finally set the ip to startforth
   ldr   ip, =startforth
   add   ip, ip, org
 
@@ -36,57 +140,72 @@ _start:
 
 # Start running the Forth interpreter
 startforth:
-  _xt init
+  _xt key
+  _xt emit
   _xt halt
 
 ###############################################################################
-# FORTH PRIMITIVES                                                            #
+# FORTH INTERPRETER                                                           #
 ###############################################################################
 
 # Enter a Forth word
-defcode "enter",enter
+defcode "enter",enter // ( -- )
   push  ip, rp
   mov   ip, lr
   next
 
 # Exit a Forth word
-defcode "exit",exit
+defcode "exit",exit // ( -- )
   pop   ip, rp
   next
 
-defcode "halt",halt
+defcode "halt",halt // ( -- )
   b     .
 
 # Push the value at ip on the stack and increment ip by 4
-defcode "lit",lit
+defcode "lit",lit // ( -- )
   push  tos, sp
   ldr   tos, [ip], #4
   next
+
+defconst "version",version,__VERSION      // Forth version
+defconst "__enter",__enter,enter          // Address of enter routine
+defconst "__f_immed",__f_immed,F_IMMED    // IMMEDIATE flag value
+defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
+
+defvar "here",here,__here          // Next free byte in dictionary
+defvar "state",state,0             // Compile/Interpreter state
+defvar "base",base,10              // Current base for printing/reading numbers
+
+###############################################################################
+# FORTH PRIMITIVES                                                            #
+###############################################################################
+
 # Drop top of stack
-defcode "drop",drop
+defcode "drop",drop // ( c -- )
   pop   tos, sp
   next
 
 # Swap tos with next element on stack
-defcode "swap",swap
+defcode "swap",swap // ( c0 c1 -- c1 c0 )
   mov   r0, tos
   pop   tos, sp
   push  r0, sp
   next
 
-# Duplicate tos
+# Duplicate tos // ( c -- c c )
 defcode "dup",dup
   push  tos, sp
   next
 
 # Place second element on tos
-defcode "over",over
+defcode "over",over // ( c0 c1 -- c0 c1 c0 )
   push  tos, sp
   ldr   tos, [sp, #4]
   next
 
 # Rotate the first three elements on the stack
-defcode "rot",rot
+defcode "rot",rot // ( c0 c1 c2 -- c2 c1 c0 )
   pop   r0, sp
   pop   r1, sp
   push  tos, sp
@@ -95,7 +214,7 @@ defcode "rot",rot
   next
 
 # Rotate the other way
-defcode "-rot",nrot
+defcode "-rot",nrot // ( c0 c1 c2 -- c2 c0 c1 )
   pop   r0, sp
   pop   r1, sp
   push  r0, sp
@@ -104,20 +223,20 @@ defcode "-rot",nrot
   next
 
 # Drop 2
-defcode "2drop",twodrop
+defcode "2drop",twodrop // ( c0 c1 -- )
   pop   tos, sp
   pop   tos, sp
   next
 
 # Duplicate top two elements
-defcode "2dup",twodup
+defcode "2dup",twodup // ( c0 c1 -- c0 c1 c0 c1 )
   ldr   r0, [sp]
   push  tos, sp
   push  r0, sp
   next
 
 # Swap first two elements with next two
-defcode "2swap",twoswap
+defcode "2swap",twoswap // ( c0 c1 c3 c4 -- c3 c4 c0 c1 )
   pop   r0, sp
   pop   r1, sp
   pop   r2, sp
@@ -128,57 +247,57 @@ defcode "2swap",twoswap
   next
 
 # Duplicate top of stack if not zero
-defcode "?dup",qdup
+defcode "?dup",qdup // ( c ? -- c c | c )
   cmp   tos, #0
   strne tos, [sp, #-4]!
   next
 
 # Increment value in tos
-defcode "1+",incr
+defcode "1+",incr // ( c -- c )
   add   tos, tos, #1
   next
 
 # Decrement value in tos
-defcode "1-",decr
+defcode "1-",decr // ( c -- c )
   sub   tos, tos, #1
   next
 
 # Add 4 to value in tos
-defcode "4+",incr4
+defcode "4+",incr4 // ( c -- c )
   add   tos, tos, #4
   next
 
 # Subtract 4 from value in tos
-defcode "4-",decr4
+defcode "4-",decr4 // ( c -- c )
   sub   tos, tos, #4
   next
 
 # Add top two values on stack
-defcode "+",add
+defcode "+",add // ( c0 c1 -- c2 )
   pop   r0, sp
   add   tos, tos, r0
   next
 
 # Subtract top two values on stack
-defcode "-",sub
+defcode "-",sub // ( c0 c1 -- c2 )
   pop   r0, sp
   sub   tos, r0, tos
   next
 
 # Multiply
-defcode "*",mul
+defcode "*",mul // ( c0 c1 -- c2 )
   pop   r0, sp
   mul   tos, tos, r0
   next
 
 # Divide
-defcode "/",div
+defcode "/",div // ( c0 c1 -- c2 )
   pop   r0, sp
   udiv  tos, r0, tos
   next
 
 # Modulo
-defcode "mod",mod
+defcode "mod",mod // ( c0 c1 -- c2 )
   pop   r0, sp
   mov   r1, tos
   udiv  tos, r0, tos 
@@ -187,113 +306,113 @@ defcode "mod",mod
   next
 
 ##### FORTH COMPARISON OPERATORS
-defcode "=",equ
+defcode "=",equ // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvneq tos, tos
   next
 
-defcode "<>",nequ
+defcode "<>",nequ // ( c0 c1 -- true | false ) 
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvnne tos, tos
   next
 
-defcode "<",lt
+defcode "<",lt // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvnlt tos, tos
   next
 
-defcode ">",gt
+defcode ">",gt // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvngt tos, tos
   next
 
-defcode "<=",le
+defcode "<=",le // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvnle tos, tos
   next
 
-defcode ">=",ge
+defcode ">=",ge // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvnge tos, tos
   next
 
-defcode "0=",zequ
+defcode "0=",zequ // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvneq tos, tos
   next
 
-defcode "0<>",znequ
+defcode "0<>",znequ // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvnne tos, tos
   next
 
-defcode "0<",zlt
+defcode "0<",zlt // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvnlt tos, tos
   next
 
-defcode "0>",zgt
+defcode "0>",zgt // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvngt tos, tos
   next
 
-defcode "0<=",zle
+defcode "0<=",zle // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvnle tos, tos
   next
 
-defcode "0>=",zge
+defcode "0>=",zge // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvnge tos, tos
   next
 
 ##### FORTH BITWISE OPERATORS
-defcode "and",and
+defcode "and",and // ( c0 c1 -- c2 )
   pop   r0, sp
   and   tos, r0, tos
   next
 
-defcode "or",or
+defcode "or",or // ( c0 c1 -- c2 )
   pop   r0, sp
   orr   tos, r0, tos
   next
 
-defcode "xor",xor
+defcode "xor",xor // ( c0 c1 -- c2 )
   pop   r0, sp
   eor   tos, r0, tos
   next
 
 ##### FORTH MEMORY OPERATIONS
-defcode "!",store
+defcode "!",store // ( val addr --  )
   pop   r0, sp
   str   r0, [tos]
   pop   tos, sp
   next
 
-defcode "@",fetch
+defcode "@",fetch // ( addr -- val )
   mov   r0, tos
   ldr   tos, [r0]
   next
 
-defcode "+!",addstore
+defcode "+!",addstore // ( addr -- )
   pop   r0, sp
   ldr   r1, [tos]
   add   r0, r0, r1
@@ -301,7 +420,7 @@ defcode "+!",addstore
   pop   tos, sp
   next
 
-defcode "-!",substore
+defcode "-!",substore // ( addr -- )
   pop   r0, sp
   ldr   r1, [tos]
   sub   r0, r1, r0
@@ -310,32 +429,23 @@ defcode "-!",substore
   next
 
 # Store/Load Bytes
-defcode "c!",storebyte
+defcode "c!",storebyte // ( byte addr -- )
   pop   r0, sp
   strb  r0, [tos]
   pop   tos, sp
   next
 
-defcode "c@",fetchbyte
+defcode "c@",fetchbyte // ( addr -- byte )
   mov   r0, tos
   ldrb  tos, [r0]
   next
 
 # Fetch byte from source and store byte to destination
-defcode "c@c!",ccopy
+defcode "c@c!",ccopy // ( src dest -- ) 
   pop   r0, sp
   ldrb  r1, [r0]
   strb  r1, [tos]
   pop   tos, sp
-  next
-
-# Block byte copy
-defcode "cmove",cmove
-  pop   r0, sp // destination
-  pop   r1, sp // source
-  mov   r2, tos // length
-  pop   tos, sp
-  bl    _cmove_
   next
 
 defcode "_cmove_",_cmove_
@@ -346,38 +456,47 @@ _cmove__LOOP:
   bne   _cmove__LOOP
   bx    lr
 
+# Block byte copy
+defcode "cmove",cmove // ( src dest len -- )
+  pop   r0, sp // destination
+  pop   r1, sp // source
+  mov   r2, tos // length
+  pop   tos, sp
+  bl    _cmove_
+  next
+
 ##### RETURN STACK MANIPULATION
-defcode ">r",tor
+defcode ">r",tor // ( c -- )
   push  tos, rp
   pop   tos, sp
   next
 
-defcode "r>",fromr
+defcode "r>",fromr // ( -- c )
   push  tos, sp
   pop   tos, rp
   next
 
-defcode "r@",rfetch
+defcode "r@",rfetch // ( -- c )
   push  tos, sp
   ldr   tos, [rp]
   next
 
-defcode "r!",rstore
+defcode "r!",rstore // ( c -- )
   str   tos, [rp]
   pop   tos, sp
   next
 
-defcode "rdrop",rdrop
+defcode "rdrop",rdrop // ( -- )
   pop   r0, rp
   next
 
 ##### STACK MANIPULATION
-defcode "dsp@",spfetch
+defcode "dsp@",spfetch // ( -- sp )
   push  tos, sp
   mov   tos, sp
   next
 
-defcode "dsp!",spstore
+defcode "dsp!",spstore // ( sp -- )
   mov   r0, tos
   pop   tos, sp
   mov   sp, r0
@@ -395,7 +514,7 @@ defconst "uartfr",uartfr,0x18     // UART flag register
 # uartfr_rxff = 0x40 -> RX FIFO is full
 # uartfr_txfe = 0x80 -> TX FIFO is empty
 
-defcode "emit?",emitq
+defcode "emit?",emitq // ( -- true | false )
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
   add   r1, r1, r2
@@ -427,13 +546,13 @@ _emit__LOOP:
   bx    lr
 
 # Print character on stack to UART
-defcode "emit",emit
+defcode "emit",emit // ( char -- )
   mov   r0, tos
   pop   tos, sp
   bl    _emit_
   next
 
-defcode "key?",keyq
+defcode "key?",keyq // ( -- true | false )
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
   add   r1, r1, r2
@@ -465,7 +584,7 @@ _key__LOOP:
   bx    lr
 
 # Read character from UART to stack
-defcode "key",key
+defcode "key",key // ( -- char )
   bl    _key_
   push  tos, sp
   mov   tos, r0
@@ -475,22 +594,7 @@ defcode "key",key
 # places the address of the input buffer on the stack
 
 ##### STANDARD FORTH VARIABLES & CONSTANTS
-defvar "latest",latest,name_init  // Last entry in Forth dictionary
-defvar "here",here,__here         // Next free byte in dictionary
-defvar "state",state,0            // Compile/Interpreter state
-defvar "base",base,10             // Current base for printing/reading numbers
-
-defconst "version",version,__VERSION      // Forth version
-defconst "__enter",__enter,enter          // Address of enter routine
-defconst "__f_immed",__f_immed,F_IMMED    // IMMEDIATE flag value
-defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
-
-# Test sequence!
-defword "init",init
-  _xt base
-  _xt fetch
-  _xt version
-  _xt exit
+defvar "latest",latest,name_latest // Last entry in Forth dictionary
 
 __here:
 
