@@ -389,17 +389,17 @@ defconst "uartdr",uartdr,0x0      // UART data register
 defconst "uartfr",uartfr,0x18     // UART flag register
 
 # Relevant bits in the UARTFR register
-defconst "uartfr_busy",uartfr_busy,0x8  // UART busy, set when TX FIFO is non-empty
-defconst "uartfr_rxfe",uartfr_rxfe,0x10 // RX FIFO is empty
-defconst "uartfr_txff",uartfr_txff,0x20 // TX FIFO is full
-defconst "uartfr_rxff",uartfr_rxff,0x40 // RX FIFO is full
-defconst "uartfr_txfe",uartfr_txfe,0x80 // TX FIFO is empty
+# uartfr_busy = 0x8  -> UART busy, set when TX FIFO is non-empty
+# uartfr_rxfe = 0x10 -> RX FIFO is empty
+# uartfr_txff = 0x20 -> TX FIFO is full
+# uartfr_rxff = 0x40 -> RX FIFO is full
+# uartfr_txfe = 0x80 -> TX FIFO is empty
 
 defcode "emit?",emitq
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
   add   r1, r1, r2
-  ldr   r2, const_uartfr_txff
+  movw  r2, #0x20
 
   mov   r0, #0
   ldr   r3, [r1]
@@ -414,7 +414,7 @@ defcode "_emit_",_emit_
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
   ldr   r3, const_uartdr
-  ldr   r4, const_uartfr_txff
+  movw  r4, #0x20
 
   # Wait for TX FIFO to be not full
 _emit__LOOP:
@@ -437,7 +437,7 @@ defcode "key?",keyq
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
   add   r1, r1, r2
-  ldr   r2, const_uartfr_rxfe
+  movw  r2, #0x10 
 
   mov   r0, #0
   ldr   r3, [r1]
@@ -452,7 +452,7 @@ defcode "_key_",_key_
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
   ldr   r3, const_uartdr
-  ldr   r4, const_uartfr_rxfe
+  movw  r4, #0x10
 
   # Wait for a character to be received
 _key__LOOP:
@@ -476,8 +476,8 @@ defcode "key",key
 
 ##### STANDARD FORTH VARIABLES & CONSTANTS
 defvar "latest",latest,name_init  // Last entry in Forth dictionary
-defvar "here",here                // Next free byte in dictionary
-defvar "state",state              // Compile/Interpreter state
+defvar "here",here,               // Next free byte in dictionary
+defvar "state",state,0            // Compile/Interpreter state
 defvar "base",base,10             // Current base for printing/reading numbers
 
 defconst "version",version,__VERSION      // Forth version
@@ -487,16 +487,8 @@ defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
 
 # Test sequence!
 defword "init",init
-  _xt key
-  _xt emit
-  _xt key
-  _xt emit
-  _xt key
-  _xt emit
-  _xt key
-  _xt emit
-  _xt key
-  _xt emit
-
+  _xt base
+  _xt fetch
+  _xt version
   _xt exit
 
