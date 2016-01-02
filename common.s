@@ -1,8 +1,10 @@
 # tos = top of stack
+# up  = "user pointer", points to user area (i.e. data)
 # org = origin == start address of binary image, used to offset ip tokens
 # rp = return stack pointer
 # ip = "interpreter" pointer (r12)
-tos .req r9
+tos .req r8
+up  .req r9
 org .req r10
 rp  .req r11
 

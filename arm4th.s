@@ -1,7 +1,43 @@
 .include "common.s"
 
-defcode "halt",halt
-  b     .
+.text
+.code 32
+
+# Minimal code for coldbooting Forth on an ARMv7 machine
+.global _start
+.align 2
+_start:
+  # Set origin = 0x80010000 since this is where qemu loads the binary image
+  movw  org, #0x0000
+  movt  org, #0x8001
+
+  # Set up to base of dram + 32 bytes
+  movw  up, #0x20
+
+  # Setup the stack pointer and return stack
+  ldr   r0, =name_enter
+  add   r0, r0, org
+  sub   r0, r0, #0x1000
+  mov   rp, r0
+  sub   r0, r0, #0x2000 // 8k return stack
+  mov   sp, r0
+
+  # tos magic value
+  movw  r0, #0xbeef
+  movt  r0, #0xdead
+  mov   tos, r0
+
+  # Finally set the ip to coldboot
+  ldr   ip, =startforth
+  add   ip, ip, org
+
+  # Go to init!
+  next
+
+# Start running the Forth interpreter
+startforth:
+  _xt init
+  _xt halt
 
 ###############################################################################
 # FORTH PRIMITIVES                                                            #
@@ -17,6 +53,9 @@ defcode "enter",enter
 defcode "exit",exit
   pop   ip, rp
   next
+
+defcode "halt",halt
+  b     .
 
 # Push the value at ip on the stack and increment ip by 4
 defcode "lit",lit
@@ -139,7 +178,7 @@ defcode "/",div
   next
 
 # Modulo
-defcode "%",mod
+defcode "mod",mod
   pop   r0, sp
   mov   r1, tos
   udiv  tos, r0, tos 
@@ -328,13 +367,17 @@ defcode "r!",rstore
   pop   tos, sp
   next
 
+defcode "rdrop",rdrop
+  pop   r0, rp
+  next
+
 ##### STACK MANIPULATION
-defcode "sp@",spfetch
+defcode "dsp@",spfetch
   push  tos, sp
   mov   tos, sp
   next
 
-defcode "sp!",spstore
+defcode "dsp!",spstore
   mov   r0, tos
   pop   tos, sp
   mov   sp, r0
@@ -351,6 +394,21 @@ defconst "uartfr_rxfe",uartfr_rxfe,0x10 // RX FIFO is empty
 defconst "uartfr_txff",uartfr_txff,0x20 // TX FIFO is full
 defconst "uartfr_rxff",uartfr_rxff,0x40 // RX FIFO is full
 defconst "uartfr_txfe",uartfr_txfe,0x80 // TX FIFO is empty
+
+defcode "emit?",emitq
+  ldr   r1, const_uart0
+  ldr   r2, const_uartfr
+  add   r1, r1, r2
+  ldr   r2, const_uartfr_txff
+
+  mov   r0, #0
+  ldr   r3, [r1]
+  ands  r3, r3, r2
+  mvneq r0, r0
+
+  push  tos, sp
+  mov   tos, r0
+  next
 
 defcode "_emit_",_emit_
   ldr   r1, const_uart0
@@ -375,6 +433,21 @@ defcode "emit",emit
   bl    _emit_
   next
 
+defcode "key?",keyq
+  ldr   r1, const_uart0
+  ldr   r2, const_uartfr
+  add   r1, r1, r2
+  ldr   r2, const_uartfr_rxfe
+
+  mov   r0, #0
+  ldr   r3, [r1]
+  ands  r3, r3, r2
+  mvneq r0, r0
+
+  push  tos, sp
+  mov   tos, r0
+  next
+
 defcode "_key_",_key_
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
@@ -397,6 +470,9 @@ defcode "key",key
   push  tos, sp
   mov   tos, r0
   next
+
+# Reads a string of characters from the input stream delimited by 'char'
+# places the address of the input buffer on the stack
 
 ##### STANDARD FORTH VARIABLES & CONSTANTS
 defvar "latest",latest,name_init  // Last entry in Forth dictionary
