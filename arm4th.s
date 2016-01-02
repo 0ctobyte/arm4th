@@ -476,7 +476,7 @@ defcode "key",key
 
 ##### STANDARD FORTH VARIABLES & CONSTANTS
 defvar "latest",latest,name_init  // Last entry in Forth dictionary
-defvar "here",here,               // Next free byte in dictionary
+defvar "here",here,__here         // Next free byte in dictionary
 defvar "state",state,0            // Compile/Interpreter state
 defvar "base",base,10             // Current base for printing/reading numbers
 
@@ -491,4 +491,6 @@ defword "init",init
   _xt fetch
   _xt version
   _xt exit
+
+__here:
 
