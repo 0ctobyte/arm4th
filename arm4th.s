@@ -294,13 +294,18 @@ defcode "c@c!",ccopy
 defcode "cmove",cmove
   pop   r0, sp // destination
   pop   r1, sp // source
-LLOOP:
-  ldrb  r2, [r1], #1
-  strb  r2, [r0], #1
-  subs  tos, tos, #1
-  bne   LLOOP
+  mov   r2, tos // length
   pop   tos, sp
+  bl    _cmove_
   next
+
+defcode "_cmove_",_cmove_
+_cmove__LOOP:
+  ldrb  r3, [r1], #1
+  strb  r3, [r0], #1
+  subs  r2, r2, #1
+  bne   _cmove__LOOP
+  bx    lr
 
 ##### RETURN STACK MANIPULATION
 defcode ">r",tor
@@ -335,6 +340,64 @@ defcode "sp!",spstore
   mov   sp, r0
   next
 
+##### INPUT/OUTPUT
+defconst "uart0",uart0,0x1c090000 // UART0 base address
+defconst "uartdr",uartdr,0x0      // UART data register
+defconst "uartfr",uartfr,0x18     // UART flag register
+
+# Relevant bits in the UARTFR register
+defconst "uartfr_busy",uartfr_busy,0x8  // UART busy, set when TX FIFO is non-empty
+defconst "uartfr_rxfe",uartfr_rxfe,0x10 // RX FIFO is empty
+defconst "uartfr_txff",uartfr_txff,0x20 // TX FIFO is full
+defconst "uartfr_rxff",uartfr_rxff,0x40 // RX FIFO is full
+defconst "uartfr_txfe",uartfr_txfe,0x80 // TX FIFO is empty
+
+defcode "_emit_",_emit_
+  ldr   r1, const_uart0
+  ldr   r2, const_uartfr
+  ldr   r3, const_uartdr
+  ldr   r4, const_uartfr_txff
+
+  # Wait for TX FIFO to be not full
+_emit__LOOP:
+  ldr   r5, [r1, r2]
+  ands  r5, r5, r4
+  bne   _emit__LOOP
+  
+  # Put character in TX FIFO
+  str   r0, [r1, r3]
+  bx    lr
+
+# Print character on stack to UART
+defcode "emit",emit
+  mov   r0, tos
+  pop   tos, sp
+  bl    _emit_
+  next
+
+defcode "_key_",_key_
+  ldr   r1, const_uart0
+  ldr   r2, const_uartfr
+  ldr   r3, const_uartdr
+  ldr   r4, const_uartfr_rxfe
+
+  # Wait for a character to be received
+_key__LOOP:
+  ldr   r5, [r1, r2]
+  ands  r5, r5, r4
+  bne   _key__LOOP
+
+  # Read character from RX FIFO
+  ldr   r0, [r1, r3]
+  bx    lr
+
+# Read character from UART to stack
+defcode "key",key
+  bl    _key_
+  push  tos, sp
+  mov   tos, r0
+  next
+
 ##### STANDARD FORTH VARIABLES & CONSTANTS
 defvar "latest",latest,name_init  // Last entry in Forth dictionary
 defvar "here",here                // Next free byte in dictionary
@@ -348,8 +411,16 @@ defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
 
 # Test sequence!
 defword "init",init
-  _xt latest
-  _xt fetch
-  _xt here
+  _xt key
+  _xt emit
+  _xt key
+  _xt emit
+  _xt key
+  _xt emit
+  _xt key
+  _xt emit
+  _xt key
+  _xt emit
+
   _xt exit
 
