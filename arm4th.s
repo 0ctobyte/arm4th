@@ -3,15 +3,6 @@
 defcode "halt",halt
   b     .
 
-# Test sequence!
-defword "init",init
-  _xt lit
-  _xt 9
-  _xt lit
-  _xt 2
-  _xt mod
-  _xt exit
-
 ###############################################################################
 # FORTH PRIMITIVES                                                            #
 ###############################################################################
@@ -25,6 +16,11 @@ defcode "exit",exit
   pop   ip, rp
   next
 
+# Push the value at ip on the stack and increment ip by 4
+defcode "lit",lit
+  push  tos, sp
+  ldr   tos, [ip], #4
+  next
 # Drop top of stack
 defcode "drop",drop
   pop   tos, sp
@@ -244,10 +240,81 @@ defcode "xor",xor
   eor   tos, r0, tos
   next
 
-# MISC FORTH WORDS
-
-# Push the value at ip on the stack and increment ip by 4
-defcode "lit",lit
-  push  tos, sp
-  ldr   tos, [ip], #4
+# FORTH MEMORY OPERATIONS
+defcode "!",store
+  pop   r0, sp
+  str   r0, [tos]
+  pop   tos, sp
   next
+
+defcode "@",fetch
+  mov   r0, tos
+  ldr   tos, [r0]
+  next
+
+defcode "+!",addstore
+  pop   r0, sp
+  ldr   r1, [tos]
+  add   r0, r0, r1
+  str   r0, [tos]
+  pop   tos, sp
+  next
+
+defcode "-!",substore
+  pop   r0, sp
+  ldr   r1, [tos]
+  sub   r0, r1, r0
+  str   r0, [tos]
+  pop   tos, sp
+  next
+
+# Store/Load Bytes
+defcode "c!",storebyte
+  pop   r0, sp
+  strb  r0, [tos]
+  pop   tos, sp
+  next
+
+defcode "c@",fetchbyte
+  mov   r0, tos
+  ldrb  tos, [r0]
+  next
+
+# Fetch byte from source and store byte to destination
+defcode "c@c!",ccopy
+  pop   r0, sp
+  ldrb  r1, [r0]
+  strb  r1, [tos]
+  pop   tos, sp
+  next
+
+# Block byte copy
+defcode "cmove",cmove
+  pop   r0, sp // destination
+  pop   r1, sp // source
+LLOOP:
+  ldrb  r2, [r1], #1
+  strb  r2, [r0], #1
+  subs  tos, tos, #1
+  bne   LLOOP
+  pop   tos, sp
+  next
+
+# STANDARD FORTH VARIABLES & CONSTANTS
+defvar "latest",latest,name_init  // Last entry in Forth dictionary
+defvar "here",here                // Next free byte in dictionary
+defvar "state",state              // Compile/Interpreter state
+defvar "base",base,10             // Current base for printing/reading numbers
+
+defconst "version",version,__VERSION      // Forth version
+defconst "__enter",__enter,enter          // Address of enter routine
+defconst "__f_immed",__f_immed,F_IMMED    // IMMEDIATE flag value
+defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
+
+# Test sequence!
+defword "init",init
+  _xt latest
+  _xt fetch
+  _xt here
+  _xt exit
+
