@@ -140,8 +140,9 @@ _start:
 
 # Start running the Forth interpreter
 startforth:
-  _xt key
-  _xt emit
+  _xt lit
+  _xt 0x20
+  _xt word
   _xt halt
 
 ###############################################################################
@@ -305,7 +306,10 @@ defcode "mod",mod // ( c0 c1 -- c2 )
   sub   tos, r0, tos
   next
 
-##### FORTH COMPARISON OPERATORS
+###############################################################################
+# FORTH COMPARISON OPERATORS                                                  #
+###############################################################################
+
 defcode "=",equ // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
@@ -384,7 +388,10 @@ defcode "0>=",zge // ( c -- true | false )
   mvnge tos, tos
   next
 
-##### FORTH BITWISE OPERATORS
+###############################################################################
+# FORTH BITWISE OPERATORS                                                     #
+###############################################################################
+
 defcode "and",and // ( c0 c1 -- c2 )
   pop   r0, sp
   and   tos, r0, tos
@@ -400,7 +407,10 @@ defcode "xor",xor // ( c0 c1 -- c2 )
   eor   tos, r0, tos
   next
 
-##### FORTH MEMORY OPERATIONS
+###############################################################################
+# FORTH MEMORY OPERATIONS                                                     #
+###############################################################################
+
 defcode "!",store // ( val addr --  )
   pop   r0, sp
   str   r0, [tos]
@@ -465,7 +475,10 @@ defcode "cmove",cmove // ( src dest len -- )
   bl    _cmove_
   next
 
-##### RETURN STACK MANIPULATION
+###############################################################################
+# RETURN STACK MANIPULATION                                                   #
+###############################################################################
+
 defcode ">r",tor // ( c -- )
   push  tos, rp
   pop   tos, sp
@@ -490,7 +503,10 @@ defcode "rdrop",rdrop // ( -- )
   pop   r0, rp
   next
 
-##### STACK MANIPULATION
+###############################################################################
+# STACK MANIPULATION                                                          #
+###############################################################################
+
 defcode "dsp@",spfetch // ( -- sp )
   push  tos, sp
   mov   tos, sp
@@ -502,7 +518,10 @@ defcode "dsp!",spstore // ( sp -- )
   mov   sp, r0
   next
 
-##### INPUT/OUTPUT
+###############################################################################
+# INPUT/OUTPUT                                                                #
+###############################################################################
+
 defconst "uart0",uart0,0x1c090000 // UART0 base address
 defconst "uartdr",uartdr,0x0      // UART data register
 defconst "uartfr",uartfr,0x18     // UART flag register
@@ -590,10 +609,45 @@ defcode "key",key // ( -- char )
   mov   tos, r0
   next
 
+defcode "_word_",_word_
+  push  lr, rp
+  mov   r7, r0
+
+  # Skip leading delimiters
+_word__skip_loop:
+  bl    _key_
+  cmp   r7, r0 
+  beq   _word__skip_loop
+
+  # Start reading characters into here+4
+  ldr   r6, var_here
+  add   r6, r6, #4
+  push  r6, rp          // Will need start address of string later to calculate string length and return ptr
+_word__read_loop:
+  strb  r0, [r6], #1
+  bl    _key_
+  cmp   r7, r0
+  bne   _word__read_loop
+  movw  r0, #0
+  strb  r0, [r6] // zero-terminate string
+
+  # Calculate length and store it
+  pop   r0, rp
+  sub   r1, r6, r0
+  sub   r0, r0, #-4
+  str   r1, [r0] 
+
+  pop   lr, rp
+  bx    lr
+
 # Reads a string of characters from the input stream delimited by 'char'
 # places the address of the input buffer on the stack
+defcode "word",word // ( char -- addr )
+  mov   r0, tos
+  bl    _word_
+  mov   tos, r0
+  next
 
-##### STANDARD FORTH VARIABLES & CONSTANTS
 defvar "latest",latest,name_latest // Last entry in Forth dictionary
 
 __here:
