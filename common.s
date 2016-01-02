@@ -78,8 +78,7 @@ name_\label:
 .macro defvar name,label,initial=0,flags=0
 defcode \name,\label,\flags
   push  tos, sp
-  ldr   tos, =var_\label
-  add   tos, tos, org
+  add   tos, pc, #0x8
   next
 .align 2
 var_\label:
@@ -90,7 +89,7 @@ var_\label:
 .macro defconst name,label,value,flags=0
 defcode \name,\label,\flags
   push  tos, sp
-  ldr   tos, const_\label
+  ldr   tos, [pc, #0x8]
   next
 .align 2
 const_\label:
