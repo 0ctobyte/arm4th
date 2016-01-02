@@ -7,7 +7,11 @@ org .req r10
 rp  .req r11
 
 # Set the latest entry in the dictionary
-.set latest,0
+.set link,0
+
+.set __VERSION,1
+.set F_IMMED,0x80
+.set F_HIDDEN,0x40
 
 # Store execution token of forth word in current location
 .macro _xt label
@@ -38,8 +42,8 @@ rp  .req r11
 .align 2
 .global name_\label
 name_\label:
-.int latest               // link pointer
-.set latest,name_\label   // set link pointer to this word
+.int link               // link pointer
+.set link,name_\label   // set link pointer to this word
 .byte \flags              // 1 byte for flags
 .byte (12346f - 12345f)   // 1 byte for length
 12345:
@@ -56,8 +60,8 @@ bl enter                  // Forth words always start with enter
 .align 2
 .global name_\label
 name_\label:
-.int latest               // link pointer
-.set latest,name_\label   // set link pointer to this word
+.int link               // link pointer
+.set link,name_\label   // set link pointer to this word
 .byte \flags              // 1 byte for flags
 .byte (12346f - 12345f)   // 1 byte for length
 12345:
@@ -66,5 +70,28 @@ name_\label:
 .align 2
 .global \label            // DTC Forth doesn't need a codeword here
 \label:
+.endm
+
+# Define a variable
+.macro defvar name,label,initial=0,flags=0
+defcode \name,\label,\flags
+  push  tos, sp
+  ldr   tos, =var_\label
+  add   tos, tos, org
+  next
+.align 2
+var_\label:
+.int \initial
+.endm
+
+# Define a constant
+.macro defconst name,label,value,flags=0
+defcode \name,\label,\flags
+  push  tos, sp
+  ldr   tos, const_\label
+  next
+.align 2
+const_\label:
+.int \value
 .endm
 
