@@ -45,7 +45,7 @@ rp  .req r11
 # Credit to jonesforth for these macros: 
 # http://git.annexia.org/?p=jonesforth.git;a=blob;f=jonesforth.S;h=45e6e854a5d2a4c3f26af264dfce56379d401425;hb=HEAD
 .macro defword name,label,flags=0
-.align 2
+.balign 4
 .global name_\label
 name_\label:
 .int link               // link pointer
@@ -55,7 +55,7 @@ name_\label:
 12345:
 .ascii "\name"            // name of the word
 12346:
-.align 2
+.balign 4
 .global \label
 \label:                   // DTC Forth has a branch to enter as the codeword
 bl enter                  // Forth words always start with enter
@@ -63,7 +63,7 @@ bl enter                  // Forth words always start with enter
 
 # Define code words
 .macro defcode name,label,flags=0
-.align 2
+.balign 4
 .global name_\label
 name_\label:
 .int link               // link pointer
@@ -73,7 +73,7 @@ name_\label:
 12345:
 .ascii "\name"            // name of the word
 12346:
-.align 2
+.balign 4
 .global \label            // DTC Forth doesn't need a codeword here
 \label:
 .endm
@@ -84,7 +84,7 @@ defcode \name,\label,\flags
   push  tos, sp
   add   tos, pc, #0x8
   next
-.align 2
+.balign 4
 var_\label:
 .int \initial
 .endm
@@ -95,7 +95,7 @@ defcode \name,\label,\flags
   push  tos, sp
   ldr   tos, [pc, #0x8]
   next
-.align 2
+.balign 4
 const_\label:
 .int \value
 .endm
@@ -109,21 +109,20 @@ const_\label:
 
 # Minimal code for coldbooting Forth on an ARMv7 machine
 .global _start
-.align 2
+.balign 4
 _start:
   # Set origin = 0x80010000 since this is where qemu loads the binary image
   movw  org, #0x0000
   movt  org, #0x8001
 
-  # Set up to base of dram + 32 bytes
-  movw  up, #0x20
+  # Set up to base of dram + 2k bytes
+  movw  up, #0x800
 
   # Setup the stack pointer and return stack
-  ldr   r0, =name_enter
+  ldr   r0, =_start
   add   r0, r0, org
-  sub   r0, r0, #0x1000
   mov   rp, r0
-  sub   r0, r0, #0x2000 // 8k return stack
+  sub   r0, r0, #0x400 // 1k return stack
   mov   sp, r0
 
   # tos magic value
@@ -140,9 +139,9 @@ _start:
 
 # Start running the Forth interpreter
 startforth:
-  _xt lit
-  _xt 0x20
-  _xt word
+  _xt tib
+  _xt tibnum
+  _xt accept
   _xt halt
 
 ###############################################################################
@@ -160,6 +159,21 @@ defcode "exit",exit // ( -- )
   pop   ip, rp
   next
 
+defconst "version",version,__VERSION      // Forth version
+defconst "rp0",rpz,_start                 // Bottom of return stack
+defconst "__enter",__enter,enter          // Address of enter routine
+defconst "__f_immed",__f_immed,F_IMMED    // IMMEDIATE flag value
+defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
+
+defvar "here",here,__here          // Next free byte in dictionary
+defvar "state",state,0             // Compile/Interpreter state
+defvar "base",base,10              // Current base for printing/reading numbers
+defvar "sp0",spz,_start-0x400      // Bottom of data stack 
+
+###############################################################################
+# FORTH PRIMITIVES                                                            #
+###############################################################################
+
 defcode "halt",halt // ( -- )
   b     .
 
@@ -169,18 +183,18 @@ defcode "lit",lit // ( -- )
   ldr   tos, [ip], #4
   next
 
-defconst "version",version,__VERSION      // Forth version
-defconst "__enter",__enter,enter          // Address of enter routine
-defconst "__f_immed",__f_immed,F_IMMED    // IMMEDIATE flag value
-defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
+# Returns address to scratch space in memory. It's a constant offset from HERE
+defcode "pad",pad // ( -- addr )
+  bl    _pad_
+  push  tos, sp
+  mov   tos, r0
+  next
 
-defvar "here",here,__here          // Next free byte in dictionary
-defvar "state",state,0             // Compile/Interpreter state
-defvar "base",base,10              // Current base for printing/reading numbers
-
-###############################################################################
-# FORTH PRIMITIVES                                                            #
-###############################################################################
+defcode "_pad_",_pad_
+  ldr   r0, var_here
+  movw  r1, #0x100
+  add   r0, r0, r1
+  bx    lr
 
 # Drop top of stack
 defcode "drop",drop // ( c -- )
@@ -458,14 +472,6 @@ defcode "c@c!",ccopy // ( src dest -- )
   pop   tos, sp
   next
 
-defcode "_cmove_",_cmove_
-_cmove__LOOP:
-  ldrb  r3, [r1], #1
-  strb  r3, [r0], #1
-  subs  r2, r2, #1
-  bne   _cmove__LOOP
-  bx    lr
-
 # Block byte copy
 defcode "cmove",cmove // ( src dest len -- )
   pop   r0, sp // destination
@@ -474,6 +480,14 @@ defcode "cmove",cmove // ( src dest len -- )
   pop   tos, sp
   bl    _cmove_
   next
+
+defcode "_cmove_",_cmove_
+_cmove__LOOP:
+  ldrb  r3, [r1], #1
+  strb  r3, [r0], #1
+  subs  r2, r2, #1
+  bne   _cmove__LOOP
+  bx    lr
 
 ###############################################################################
 # RETURN STACK MANIPULATION                                                   #
@@ -533,6 +547,15 @@ defconst "uartfr",uartfr,0x18     // UART flag register
 # uartfr_rxff = 0x40 -> RX FIFO is full
 # uartfr_txfe = 0x80 -> TX FIFO is empty
 
+defconst "tib",tib,0x100+0x80000000  // Location of text input buffer
+defconst "tib#",tibnum,0x400         // 1k tib
+defvar   ">in",toin,0x0              // Current parse area in tib
+
+defconst "bl",bl,0x20 // space ascii character
+defconst "bs",bs,0x08 // back space character
+defconst "cr",cr,0x0d // carriage return
+defconst "lf",lf,0x0a // line feed
+
 defcode "emit?",emitq // ( -- true | false )
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
@@ -546,6 +569,13 @@ defcode "emit?",emitq // ( -- true | false )
 
   push  tos, sp
   mov   tos, r0
+  next
+
+# Print character on stack to UART
+defcode "emit",emit // ( char -- )
+  mov   r0, tos
+  pop   tos, sp
+  bl    _emit_
   next
 
 defcode "_emit_",_emit_
@@ -564,13 +594,6 @@ _emit__LOOP:
   str   r0, [r1, r3]
   bx    lr
 
-# Print character on stack to UART
-defcode "emit",emit // ( char -- )
-  mov   r0, tos
-  pop   tos, sp
-  bl    _emit_
-  next
-
 defcode "key?",keyq // ( -- true | false )
   ldr   r1, const_uart0
   ldr   r2, const_uartfr
@@ -582,6 +605,13 @@ defcode "key?",keyq // ( -- true | false )
   ands  r3, r3, r2
   mvneq r0, r0
 
+  push  tos, sp
+  mov   tos, r0
+  next
+
+# Read character from UART to stack
+defcode "key",key // ( -- char )
+  bl    _key_
   push  tos, sp
   mov   tos, r0
   next
@@ -602,53 +632,140 @@ _key__LOOP:
   ldr   r0, [r1, r3]
   bx    lr
 
-# Read character from UART to stack
-defcode "key",key // ( -- char )
-  bl    _key_
-  push  tos, sp
-  mov   tos, r0
-  next
-
-defcode "_word_",_word_
-  push  lr, rp
-  mov   r7, r0
-
-  # Skip leading delimiters
-_word__skip_loop:
-  bl    _key_
-  cmp   r7, r0 
-  beq   _word__skip_loop
-
-  # Start reading characters into here+4
-  ldr   r6, var_here
-  add   r6, r6, #4
-  push  r6, rp          // Will need start address of string later to calculate string length and return ptr
-_word__read_loop:
-  strb  r0, [r6], #1
-  bl    _key_
-  cmp   r7, r0
-  bne   _word__read_loop
-  movw  r0, #0
-  strb  r0, [r6] // zero-terminate string
-
-  # Calculate length and store it
-  pop   r0, rp
-  sub   r1, r6, r0
-  sub   r0, r0, #-4
-  str   r1, [r0] 
-
-  pop   lr, rp
-  bx    lr
-
-# Reads a string of characters from the input stream delimited by 'char'
-# places the address of the input buffer on the stack
+# Reads a string of characters from the input buffer delimited by 'char'
+# places the address of the string on the stack, (the first word of the string contains
+# the length of the string)
 defcode "word",word // ( char -- addr )
   mov   r0, tos
   bl    _word_
   mov   tos, r0
   next
 
+defcode "_word_",_word_
+  push  lr, rp
+  mov   r7, r0            // r7 = delimiter
+  bl    _pad_
+  add   r6, r0, #4        // r6 = pad
+  push  r6, rp            // will need this later to calculate word size
+
+  ldr   r1, const_tib     // r1 = tib address
+  ldr   r4, =var_toin     // r4 = >in pointer
+  ldr   r2, [r4]          // r2 = >in value
+  ldr   r3, const_tibnum  // r3 = tib size
+
+  # Skip leading delimiters
+_word__skip_loop:
+  # Check if end of TIB and exit with 0 length word
+  cmp   r2, r3
+  bge   _word__exit
+
+  ldrb  r0, [r1, r2]
+  add   r2, r2, #1
+  
+  # Check if delimiter and skip
+  cmp   r0, r7
+  beq   _word__skip_loop
+  
+  # Start reading characters into pad+4 
+_word__read_loop:
+  strb  r0, [r6], #1
+
+  # Check if end of TIB and exit
+  cmp   r2, r3
+  bge   _word__exit
+
+  ldrb  r0, [r1, r2]
+  add   r2, r2, #1
+  cmp   r0, r7
+  bne   _word__read_loop
+
+  # Calculate length and store it
+_word__exit:
+  pop   r0, rp
+  sub   r6, r6, r0
+  str   r6, [r0, #-4]!
+
+  # Update >in
+  str   r2, [r4]
+
+  pop   lr, rp
+  bx    lr
+
+# Read in at most count chars from input to addr, stopping if a CR/LF is read
+# Places the length of the string on the stack
+defcode "accept",accept // ( addr count -- n )
+  pop   r1, sp  // addr
+  mov   r0, tos // count
+  bl    _accept_
+  mov   tos, r0
+  next
+
+defcode "_accept_",_accept_
+  push  lr, rp
+
+  mov   r7, r1 // addr
+  mov   r6, r0 // max count
+
+  movw  r0, #0
+  push  r0, rp       // character count
+  ldr   r0, const_bs // backspace
+  push  r0, rp
+  ldr   r0, const_cr // carriage return
+  push  r0, rp
+
+_accept__read_loop:
+  ldr   r1, [rp, #8]
+  cmp   r1, r6       // Reached max count?
+  beq   _accept__exit
+
+  bl    _key_
+  bl    _emit_       // echo character
+  
+  ldr   r1, [rp, #8] // character count
+  
+  ldr   r2, [rp]
+  cmp   r2, r0       // carriage return?
+  beq   _accept__exit
+
+  ldr   r2, [rp, #4]
+  cmp   r2, r0       // backspace?
+  subeq r7, r7, #1
+  subeq r1, r1, #1
+  str   r1, [rp, #8]
+  beq   _accept__read_loop
+ 
+  # Otherwise, store character in buffer and increment count
+  add   r1, r1, #1
+  str   r1, [rp, #8]
+  strb  r0, [r7], #1
+  b     _accept__read_loop
+
+_accept__exit:
+  ldr   r0, const_lf // Output line feed as well
+  bl    _key_
+
+  pop   r0, rp
+  pop   r0, rp
+  pop   r0, rp
+
+  pop   lr, rp
+  bx    lr
+
+# Leave the address and length of string beginning at addr1 on the stack
+defcode "count",count // ( addr1 -- addr2 n )
+  mov   r0, tos
+  bl    _count_
+  mov   tos, r1
+  push  r0, sp
+  next
+
+defcode "_count_",_count_
+  ldr   r1, [r0]    // String length
+  add   r0, r0, #4  // Actual string starting address
+  bx    lr
+
 defvar "latest",latest,name_latest // Last entry in Forth dictionary
 
+.balign 4
 __here:
 
