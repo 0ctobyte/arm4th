@@ -2,6 +2,7 @@
 
 A minimal Forth kernel/interpreter for ARMv7 machines.
 Currently, this kernel can run barebones on an emulated (using QEMU) Versatile Express board with Cortex-A15 machine.
+It can also run on a BeagleBone Black with a Cortex-A8 CPU.
 
 # Requirements
 You will need the `arm-none-eabi-gcc` package as well as `qemu` installed on your system.
@@ -17,4 +18,6 @@ The `make` command will produce the binary image file `arm4th.bin`
 To run the arm4th binary on qemu:
 `./emulator -nogdb`
 
-You won't see much now since the forth kernel will halt on boot...
+You should see a Forth prompt ('OK') and you will be able to type stuff in, but it doesn't do anything yet with
+user input...
+
