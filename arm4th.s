@@ -39,7 +39,6 @@ rp  .req r11
 .macro pop reg,sp
   ldr   \reg, [\sp], #4
 .endm
-  
 
 # Some macros to define words and codewords
 # Credit to jonesforth for these macros: 
@@ -111,12 +110,22 @@ const_\label:
 .global _start
 .balign 4
 _start:
-  # Set origin = 0x80010000 since this is where qemu loads the binary image
-  movw  org, #0x0000
-  movt  org, #0x8001
+#if BBB
+  # For the BeagleBoneBlack disable the WDT
+  bl    _disable_wdt_
+
+  # enable the UART FIFO on the BeagleBone
+  movw  r0, #0x1
+  ldr   r1, const_uart0
+  str   r0, [r1, #0x8]
+#endif
+
+  # Set origin
+  ldr   org, const_origin
 
   # Set up to base of dram + 2k bytes
-  movw  up, #0x800
+  ldr   up, const_dram
+  add   up, up, #0x800
 
   # Setup the stack pointer and return stack
   ldr   r0, =_start
@@ -137,12 +146,37 @@ _start:
   # Go to init!
   next
 
+#if BBB
+.balign 4
+# Disable the watchdog timer
+_disable_wdt_:
+  movw r0, #0x5000
+  movt r0, #0x44e3
+  movw r2, #0xaaaa
+wdt_wpsr_write:
+  # Offset to WSPR register (watchdog timer start/stop register) 
+  add r1, r0, #0x48
+  str r2, [r1]
+  # Offset to WWPS register (watchdog timer write posting bits register)
+  add r1, r0, #0x34
+wdt_wwps_poll:
+  ldr r3, [r1]
+  # Check if write is pending
+  tst r3, #0x10
+  bne wdt_wwps_poll
+  movw r3, #0x5555
+  teq r2, r3
+  beq wdt_done
+  movw r2, #0x5555
+  b wdt_wpsr_write
+wdt_done:
+  bx lr
+#endif
+
 # Start running the Forth interpreter
 startforth:
-  _xt tib
-  _xt tibnum
-  _xt accept
-  _xt halt
+  _xt quit
+  _xt bye
 
 ###############################################################################
 # FORTH INTERPRETER                                                           #
@@ -159,11 +193,23 @@ defcode "exit",exit // ( -- )
   pop   ip, rp
   next
 
+# Quits to command-line to interpreter
+defword "quit",quit // ( -- )
+  _xt rpz
+  _xt rstore
+  _xt prompt
+  _xt tib
+  _xt tibnum
+  _xt accept
+  _xt quit
+
 defconst "version",version,__VERSION      // Forth version
 defconst "rp0",rpz,_start                 // Bottom of return stack
 defconst "__enter",__enter,enter          // Address of enter routine
 defconst "__f_immed",__f_immed,F_IMMED    // IMMEDIATE flag value
 defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
+defconst "origin",origin,0x80010000       // Base of dictionary image in memory
+defconst "dram",dram,0x80000000           // Base of dram
 
 defvar "here",here,__here          // Next free byte in dictionary
 defvar "state",state,0             // Compile/Interpreter state
@@ -174,7 +220,7 @@ defvar "sp0",spz,_start-0x400      // Bottom of data stack
 # FORTH PRIMITIVES                                                            #
 ###############################################################################
 
-defcode "halt",halt // ( -- )
+defcode "bye",bye // ( -- )
   b     .
 
 # Push the value at ip on the stack and increment ip by 4
@@ -536,18 +582,29 @@ defcode "dsp!",spstore // ( sp -- )
 # INPUT/OUTPUT                                                                #
 ###############################################################################
 
+#if BBB
+defconst "uart0",uart0,0x44e09000 // UART0 base address on the BeagleBone
+defconst "uarthr",uarthr,0x0      // UART TX/RX holding register
+defconst "uartlsr",uartlsr,0x14   // UART line status register
+defconst "uartssr",uartssr,0x44   // UART supplementary status register
+#else
 defconst "uart0",uart0,0x1c090000 // UART0 base address
 defconst "uartdr",uartdr,0x0      // UART data register
 defconst "uartfr",uartfr,0x18     // UART flag register
+#endif
 
-# Relevant bits in the UARTFR register
-# uartfr_busy = 0x8  -> UART busy, set when TX FIFO is non-empty
-# uartfr_rxfe = 0x10 -> RX FIFO is empty
-# uartfr_txff = 0x20 -> TX FIFO is full
-# uartfr_rxff = 0x40 -> RX FIFO is full
-# uartfr_txfe = 0x80 -> TX FIFO is empty
+// Location of text input buffer
+defcode "tib",tib // ( -- addr )
+  bl    _tib_
+  push  tos, sp
+  mov   tos, r0
+  next
 
-defconst "tib",tib,0x100+0x80000000  // Location of text input buffer
+defcode "_tib_",_tib_
+  ldr   r0, const_dram
+  add   r0, r0, #0x100
+  bx    lr
+
 defconst "tib#",tibnum,0x400         // 1k tib
 defvar   ">in",toin,0x0              // Current parse area in tib
 
@@ -558,9 +615,15 @@ defconst "lf",lf,0x0a // line feed
 
 defcode "emit?",emitq // ( -- true | false )
   ldr   r1, const_uart0
+#if BBB
+  ldr   r2, const_uartssr
+  add   r1, r1, r2
+  movw  r2, #0x1
+#else
   ldr   r2, const_uartfr
   add   r1, r1, r2
   movw  r2, #0x20
+#endif
 
   mov   r0, #0
   ldr   r3, [r1]
@@ -580,9 +643,15 @@ defcode "emit",emit // ( char -- )
 
 defcode "_emit_",_emit_
   ldr   r1, const_uart0
+#if BBB
+  ldr   r2, const_uartssr
+  ldr   r3, const_uarthr
+  movw  r4, #0x1
+#else
   ldr   r2, const_uartfr
   ldr   r3, const_uartdr
   movw  r4, #0x20
+#endif
 
   # Wait for TX FIFO to be not full
 _emit__LOOP:
@@ -596,13 +665,22 @@ _emit__LOOP:
 
 defcode "key?",keyq // ( -- true | false )
   ldr   r1, const_uart0
+#if BBB
+  ldr   r2, const_uartlsr
+  add   r1, r1, r2
+  movw  r2, #0x1
+#else
   ldr   r2, const_uartfr
   add   r1, r1, r2
   movw  r2, #0x10 
+#endif
 
   mov   r0, #0
   ldr   r3, [r1]
   ands  r3, r3, r2
+#if BBB
+  eors  r3, r3, #1
+#endif
   mvneq r0, r0
 
   push  tos, sp
@@ -618,14 +696,23 @@ defcode "key",key // ( -- char )
 
 defcode "_key_",_key_
   ldr   r1, const_uart0
+#if BBB
+  ldr   r2, const_uartlsr
+  ldr   r3, const_uarthr
+  movw  r4, #0x1
+#else
   ldr   r2, const_uartfr
   ldr   r3, const_uartdr
   movw  r4, #0x10
+#endif
 
   # Wait for a character to be received
 _key__LOOP:
   ldr   r5, [r1, r2]
   ands  r5, r5, r4
+#if BBB
+  eors  r5, r5, #1
+#endif
   bne   _key__LOOP
 
   # Read character from RX FIFO
@@ -648,7 +735,8 @@ defcode "_word_",_word_
   add   r6, r0, #4        // r6 = pad
   push  r6, rp            // will need this later to calculate word size
 
-  ldr   r1, const_tib     // r1 = tib address
+  bl    _tib_        
+  mov   r1, r0            // r1 = tib address
   ldr   r4, =var_toin     // r4 = >in pointer
   ldr   r2, [r4]          // r2 = >in value
   ldr   r3, const_tibnum  // r3 = tib size
@@ -741,8 +829,9 @@ _accept__read_loop:
   b     _accept__read_loop
 
 _accept__exit:
-  ldr   r0, const_lf // Output line feed as well
-  bl    _key_
+  # Emit a linefeed
+  ldr   r0, const_lf
+  bl    _emit_
 
   pop   r0, rp
   pop   r0, rp
@@ -750,6 +839,19 @@ _accept__exit:
 
   pop   lr, rp
   bx    lr
+
+// Print the Forth prompt
+defword "prompt",prompt // ( -- )
+  _xt lit
+  _xt 0x4f
+  _xt emit
+  _xt lit
+  _xt 0x4b
+  _xt emit
+  _xt lit
+  _xt 0x20
+  _xt emit
+  _xt exit
 
 # Leave the address and length of string beginning at addr1 on the stack
 defcode "count",count // ( addr1 -- addr2 n )
