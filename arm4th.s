@@ -195,10 +195,6 @@ wdt_done:
 
 # Start running the Forth interpreter
 startforth:
-  _xt lit
-  _xt 16
-  _xt base
-  _xt store
   _xt quit
   _xt bye
 
@@ -254,7 +250,7 @@ defcode "bye",bye // ( -- )
   b     .
 
 # Push the value at ip on the stack and increment ip by 4
-defcode "lit",lit // ( -- )
+defcode "litera",literal // ( -- )
   push  tos, sp
   ldr   tos, [ip], #4
   next
@@ -328,58 +324,58 @@ defcode "2swap",twoswap // ( c0 c1 c3 c4 -- c3 c4 c0 c1 )
   next
 
 # Duplicate top of stack if not zero
-defcode "?dup",qdup // ( c ? -- c c | c )
+defcode "?dup",questiondup // ( c ? -- c c | c )
   cmp   tos, #0
   strne tos, [sp, #-4]!
   next
 
 # Increment value in tos
-defcode "1+",incr // ( c -- c )
+defcode "1+",oneplus // ( c -- c )
   add   tos, tos, #1
   next
 
 # Decrement value in tos
-defcode "1-",decr // ( c -- c )
+defcode "1-",oneminus // ( c -- c )
   sub   tos, tos, #1
   next
 
 # Add 4 to value in tos
-defcode "4+",incr4 // ( c -- c )
+defcode "4+",fourplus // ( c -- c )
   add   tos, tos, #4
   next
 
 # Subtract 4 from value in tos
-defcode "4-",decr4 // ( c -- c )
+defcode "4-",fourminus // ( c -- c )
   sub   tos, tos, #4
   next
 
 # Add top two values on stack
-defcode "+",add // ( c0 c1 -- c2 )
+defcode "+",plus // ( c0 c1 -- c2 )
   pop   r0, sp
   add   tos, tos, r0
   next
 
 # Subtract top two values on stack
-defcode "-",sub // ( c0 c1 -- c2 )
+defcode "-",minus // ( c0 c1 -- c2 )
   pop   r0, sp
   sub   tos, r0, tos
   next
 
 # Multiply
-defcode "*",mul // ( c0 c1 -- c2 )
+defcode "*",star // ( c0 c1 -- c2 )
   pop   r0, sp
   mul   tos, tos, r0
   next
 
 # Divide
-defcode "/",div // ( c0 c1 -- c2 )
+defcode "/",slash // ( c0 c1 -- c2 )
   pop   r0, sp
   mov   r1, tos
-  bl    _div_
+  bl    _slash_
   mov   tos, r0
   next
 
-defcode "_/_",_div_
+defcode "_/_",_slash_
 #if BBB
   vmov  s0, r0
   vcvt.f64.u32 d0, s0
@@ -423,15 +419,15 @@ defcode "_mod_",_mod_
   bx    lr
 
 # divmod
-defcode "/mod",divmod // ( c0 c1 -- rem quot )
+defcode "/mod",slashmod // ( c0 c1 -- rem quot )
   pop   r0, sp
   mov   r1, tos
-  bl    _divmod_
+  bl    _slashmod_
   push  r0, sp
   mov   tos, r1
   next
 
-defcode "_/mod_",_divmod_
+defcode "_/mod_",_slashmod_
 #if BBB
   vmov  s0, r0
   vcvt.f64.u32 d0, s0
@@ -456,79 +452,79 @@ defcode "_/mod_",_divmod_
 # FORTH COMPARISON OPERATORS                                                  #
 ###############################################################################
 
-defcode "=",equ // ( c0 c1 -- true | false )
+defcode "=",equals // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvneq tos, tos
   next
 
-defcode "<>",nequ // ( c0 c1 -- true | false ) 
+defcode "<>",notequals // ( c0 c1 -- true | false ) 
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvnne tos, tos
   next
 
-defcode "<",lt // ( c0 c1 -- true | false )
+defcode "<",lessthan // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvnlt tos, tos
   next
 
-defcode ">",gt // ( c0 c1 -- true | false )
+defcode ">",greaterthan // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvngt tos, tos
   next
 
-defcode "<=",le // ( c0 c1 -- true | false )
+defcode "<=",lessthanequals // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvnle tos, tos
   next
 
-defcode ">=",ge // ( c0 c1 -- true | false )
+defcode ">=",greaterthanequals // ( c0 c1 -- true | false )
   pop   r0, sp
   cmp   r0, tos
   mov   tos, #0
   mvnge tos, tos
   next
 
-defcode "0=",zequ // ( c -- true | false )
+defcode "0=",zeroequals // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvneq tos, tos
   next
 
-defcode "0<>",znequ // ( c -- true | false )
+defcode "0<>",zeronotequals // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvnne tos, tos
   next
 
-defcode "0<",zlt // ( c -- true | false )
+defcode "0<",zerolessthan // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvnlt tos, tos
   next
 
-defcode "0>",zgt // ( c -- true | false )
+defcode "0>",zerogreaterthan // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvngt tos, tos
   next
 
-defcode "0<=",zle // ( c -- true | false )
+defcode "0<=",zerolessthanequals // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvnle tos, tos
   next
 
-defcode "0>=",zge // ( c -- true | false )
+defcode "0>=",zerogreaterthanequals // ( c -- true | false )
   cmp   tos, #0
   mov   tos, #0
   mvnge tos, tos
@@ -568,7 +564,7 @@ defcode "@",fetch // ( addr -- val )
   ldr   tos, [r0]
   next
 
-defcode "+!",addstore // ( addr -- )
+defcode "+!",plusstore // ( addr -- )
   pop   r0, sp
   ldr   r1, [tos]
   add   r0, r0, r1
@@ -576,7 +572,7 @@ defcode "+!",addstore // ( addr -- )
   pop   tos, sp
   next
 
-defcode "-!",substore // ( addr -- )
+defcode "-!",minusstore // ( addr -- )
   pop   r0, sp
   ldr   r1, [tos]
   sub   r0, r1, r0
@@ -920,7 +916,7 @@ _accept__exit:
 
 // Refills the TIB. True if succeeded or else false 
 defword "refill",refill // ( -- true | false ) 
-  _xt lit
+  _xt literal
   _xt 0x0
   _xt toin
   _xt store
@@ -929,7 +925,7 @@ defword "refill",refill // ( -- true | false )
   _xt tibnum
   _xt accept
   _xt drop
-  _xt lit
+  _xt literal
   _xt 0xffffffff
   _xt exit
 
@@ -1113,14 +1109,14 @@ defcode "_._",_dot_
   movw  r6, #0 // digit count
 
   # Convert all the digits and push on the stack
-_dot__divmod_loop:
-  bl    _divmod_
+_dot__slashmod_loop:
+  bl    _slashmod_
   cmp   r1, #0   // Quotient == 0?
   str   r0, [rp, #-4]!
   add   r6, r6, #1
   mov   r0, r1
   mov   r1, r7
-  bne   _dot__divmod_loop
+  bne   _dot__slashmod_loop
 
 _dot__convert_to_char_loop:
   cmp   r6, #0 // digit count == 0?
@@ -1139,13 +1135,13 @@ _dot__exit:
 
 // Print the Forth prompt
 defword "prompt",prompt // ( -- )
-  _xt lit
+  _xt literal
   _xt 0x4f
   _xt emit
-  _xt lit
+  _xt literal
   _xt 0x4b
   _xt emit
-  _xt lit
+  _xt literal
   _xt 0x20
   _xt emit
   _xt exit
