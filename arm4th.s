@@ -219,7 +219,6 @@ defword "quit",quit // ( -- )
   _xt rstore
   _xt stackprompt
   _xt refill
-  _xt drop
   _xt bl
   _xt word
   _xt count
@@ -790,26 +789,28 @@ _key__LOOP:
   ldr   r0, [r1, r3]
   bx    lr
 
-# Reads a string of characters from the input buffer delimited by 'char'
+# Reads a string of n characters from the input buffer delimited by 'char'
 # places the address of the string on the stack, (the first word of the string contains
 # the length of the string)
-defcode "word",word // ( char -- addr )
-  mov   r0, tos
+defcode "word",word // ( n char -- addr )
+  pop   r0, sp
+  mov   r1, tos
   bl    _word_
   mov   tos, r0
   next
 
 defcode "_word_",_word_
   push  lr, rp
-  mov   r7, r0            // r7 = delimiter
+  mov   r7, r1            // r7 = delimiter
+  mov   r3, r0            // String length
   ldr   r6, const_pad
   add   r6, r6, #4        // r6 = pad
   push  r6, rp            // will need this later to calculate word size
 
   ldr   r1, var_tib       // r1 = tib address
-  ldr   r4, =var_toin     // r4 = >in pointer
+  ldr   r4, =var_toin     
+  add   r4, r4, org       // r4 = >in pointer 
   ldr   r2, [r4]          // r2 = >in value
-  ldr   r3, const_tibnum  // r3 = tib size
 
   # Skip leading delimiters
 _word__skip_loop:
@@ -899,10 +900,6 @@ _accept__read_loop:
   b     _accept__read_loop
 
 _accept__exit:
-  # Store a space at end of input
-  movw  r0, #0x20
-  strb  r0, [r7]
-
   # Emit a linefeed
   ldr   r0, const_lf
   bl    _emit_
@@ -914,8 +911,8 @@ _accept__exit:
   pop   lr, rp
   bx    lr
 
-// Refills the TIB. True if succeeded or else false 
-defword "refill",refill // ( -- true | false ) 
+// Refills the TIB. Puts the length of the string on the stack 
+defword "refill",refill // ( -- n ) 
   _xt literal
   _xt 0x0
   _xt toin
@@ -924,9 +921,6 @@ defword "refill",refill // ( -- true | false )
   _xt fetch
   _xt tibnum
   _xt accept
-  _xt drop
-  _xt literal
-  _xt 0xffffffff
   _xt exit
 
 ###############################################################################
@@ -1038,6 +1032,10 @@ defcode "number",number // ( c-addr n -- ? num )
   movw  r0, #0  // ud1
   pop   tos, sp
 
+  # If n == 0 then nothing to convert
+  cmp   r2, #0
+  beq   number_exit
+
   # Check if '-'
   ldrb  r3, [r1]
   cmp   r3, #0x2d 
@@ -1092,6 +1090,8 @@ number_goto__number_:
   cmp   r2, #0
   streq tos, [sp, #-4]!
   moveq tos, r0
+
+number_exit:
   next
 
 # Prints number on stack
