@@ -918,8 +918,8 @@ _accept__exit:
   pop   lr, rp
   bx    lr
 
-// Refills the TIB. Places the number of characters read on the stack
-defword "refill",refill // ( -- n ) 
+// Refills the TIB. True if succeeded or else false 
+defword "refill",refill // ( -- true | false ) 
   _xt lit
   _xt 0x0
   _xt toin
@@ -928,6 +928,9 @@ defword "refill",refill // ( -- n )
   _xt fetch
   _xt tibnum
   _xt accept
+  _xt drop
+  _xt lit
+  _xt 0xffffffff
   _xt exit
 
 ###############################################################################
