@@ -114,12 +114,15 @@ _start:
   # For the BeagleBoneBlack disable the WDT
   bl    _disable_wdt_
 
+  # Enable the vfpu
+  bl    _enable_vfpu_
+
   # enable the UART FIFO on the BeagleBone
   movw  r0, #0x1
   ldr   r1, const_uart0
   str   r0, [r1, #0x8]
 #endif
-
+  
   # Set origin
   ldr   org, const_origin
 
@@ -128,11 +131,8 @@ _start:
   add   up, up, #0x800
 
   # Setup the stack pointer and return stack
-  ldr   r0, =_start
-  add   r0, r0, org
-  mov   rp, r0
-  sub   r0, r0, #0x400 // 1k return stack
-  mov   sp, r0
+  ldr   rp, const_rpz
+  ldr   sp, var_spz
 
   # tos magic value
   movw  r0, #0xbeef
@@ -146,9 +146,29 @@ _start:
   # Go to init!
   next
 
+.balign 4
+.ltorg
+
 #if BBB
 .balign 4
+_enable_vfpu_:
+  # CPACR: Allow full (PL0 & PL1) access to coprocessors 10 & 11 (VFPU) 
+  mrc p15, 0, r2, c1, c0, 2
+  mov r3, #0xf
+  orr r2, r2, r3, lsl #20
+  mcr p15, 0, r2, c1, c0, 2
+  isb
+
+  # Enable the VFPU
+  vmrs r2, fpexc
+  mov r3, #1
+  orr r2, r2, r3, lsl #30
+  vmsr fpexc, r2
+
+  bx lr
+
 # Disable the watchdog timer
+.balign 4
 _disable_wdt_:
   movw r0, #0x5000
   movt r0, #0x44e3
@@ -175,6 +195,10 @@ wdt_done:
 
 # Start running the Forth interpreter
 startforth:
+  _xt lit
+  _xt 16
+  _xt base
+  _xt store
   _xt quit
   _xt bye
 
@@ -197,24 +221,30 @@ defcode "exit",exit // ( -- )
 defword "quit",quit // ( -- )
   _xt rpz
   _xt rstore
-  _xt prompt
-  _xt tib
-  _xt tibnum
-  _xt accept
+  _xt stackprompt
+  _xt refill
+  _xt drop
+  _xt bl
+  _xt word
+  _xt count
+  _xt number
   _xt quit
 
+#define ORIGIN 0x80010000
+#define DRAM 0x80000000
+
 defconst "version",version,__VERSION      // Forth version
-defconst "rp0",rpz,_start                 // Bottom of return stack
-defconst "__enter",__enter,enter          // Address of enter routine
+defconst "rp0",rpz,ORIGIN                 // Bottom of return stack
+defconst "__enter",__enter,ORIGIN+enter   // Address of enter routine
 defconst "__f_immed",__f_immed,F_IMMED    // IMMEDIATE flag value
 defconst "__f_hidden",__f_hidden,F_HIDDEN // HIDDEN flag value
-defconst "origin",origin,0x80010000       // Base of dictionary image in memory
-defconst "dram",dram,0x80000000           // Base of dram
+defconst "origin",origin,ORIGIN           // Base of dictionary image in memory
+defconst "dram",dram,DRAM                 // Base of dram
 
-defvar "here",here,__here          // Next free byte in dictionary
+defvar "here",here,ORIGIN+__here   // Next free byte in dictionary
 defvar "state",state,0             // Compile/Interpreter state
 defvar "base",base,10              // Current base for printing/reading numbers
-defvar "sp0",spz,_start-0x400      // Bottom of data stack 
+defvar "sp0",spz,ORIGIN-0x400      // Bottom of data stack 
 
 ###############################################################################
 # FORTH PRIMITIVES                                                            #
@@ -230,17 +260,7 @@ defcode "lit",lit // ( -- )
   next
 
 # Returns address to scratch space in memory. It's a constant offset from HERE
-defcode "pad",pad // ( -- addr )
-  bl    _pad_
-  push  tos, sp
-  mov   tos, r0
-  next
-
-defcode "_pad_",_pad_
-  ldr   r0, var_here
-  movw  r1, #0x100
-  add   r0, r0, r1
-  bx    lr
+defconst "pad",pad,__here+ORIGIN+0x100
 
 # Drop top of stack
 defcode "drop",drop // ( c -- )
@@ -354,17 +374,83 @@ defcode "*",mul // ( c0 c1 -- c2 )
 # Divide
 defcode "/",div // ( c0 c1 -- c2 )
   pop   r0, sp
-  udiv  tos, r0, tos
+  mov   r1, tos
+  bl    _div_
+  mov   tos, r0
   next
+
+defcode "_/_",_div_
+#if BBB
+  vmov  s0, r0
+  vcvt.f64.u32 d0, s0
+  vmov  s2, r1
+  vcvt.f64.u32 d1, s2
+
+  vdiv.f64 d0, d0, d1
+  vcvt.u32.f64 s0, d0
+
+  vmov  r0, s0
+#else
+  udiv  r0, r0, r1
+#endif
+  bx    lr
 
 # Modulo
 defcode "mod",mod // ( c0 c1 -- c2 )
   pop   r0, sp
   mov   r1, tos
-  udiv  tos, r0, tos 
-  mul   tos, tos, r1
-  sub   tos, r0, tos
+  bl    _mod_
+  mov   tos, r0
   next
+
+defcode "_mod_",_mod_
+#if BBB
+  vmov  s0, r0
+  vcvt.f64.u32 d0, s0
+  vmov  s2, r1
+  vcvt.f64.u32 d1, s2
+
+  vdiv.f64 d0, d0, d1
+  vcvt.u32.f64 s0, d0
+
+  vmov  r2, s0
+
+  mls   r0, r1, r2, r0
+#else
+  udiv  r2, r0, r1 
+  mls   r0, r1, r2, r0
+#endif
+  bx    lr
+
+# divmod
+defcode "/mod",divmod // ( c0 c1 -- rem quot )
+  pop   r0, sp
+  mov   r1, tos
+  bl    _divmod_
+  push  r0, sp
+  mov   tos, r1
+  next
+
+defcode "_/mod_",_divmod_
+#if BBB
+  vmov  s0, r0
+  vcvt.f64.u32 d0, s0
+  vmov  s2, r1
+  vcvt.f64.u32 d1, s2
+
+  vdiv.f64 d0, d0, d1
+  vcvt.u32.f64 s0, d0
+
+  vmov  r2, s0
+
+  mls   r0, r1, r2, r0
+  mov   r1, r2
+#else
+  udiv  r2, r0, r1 
+  mls   r0, r1, r2, r0
+  mov   r1, r2
+#endif
+  bx    lr
 
 ###############################################################################
 # FORTH COMPARISON OPERATORS                                                  #
@@ -593,18 +679,7 @@ defconst "uartdr",uartdr,0x0      // UART data register
 defconst "uartfr",uartfr,0x18     // UART flag register
 #endif
 
-// Location of text input buffer
-defcode "tib",tib // ( -- addr )
-  bl    _tib_
-  push  tos, sp
-  mov   tos, r0
-  next
-
-defcode "_tib_",_tib_
-  ldr   r0, const_dram
-  add   r0, r0, #0x100
-  bx    lr
-
+defvar   "tib",tib,DRAM+0x100        // Location of text input buffer
 defconst "tib#",tibnum,0x400         // 1k tib
 defvar   ">in",toin,0x0              // Current parse area in tib
 
@@ -731,12 +806,11 @@ defcode "word",word // ( char -- addr )
 defcode "_word_",_word_
   push  lr, rp
   mov   r7, r0            // r7 = delimiter
-  bl    _pad_
-  add   r6, r0, #4        // r6 = pad
+  ldr   r6, const_pad
+  add   r6, r6, #4        // r6 = pad
   push  r6, rp            // will need this later to calculate word size
 
-  bl    _tib_        
-  mov   r1, r0            // r1 = tib address
+  ldr   r1, var_tib       // r1 = tib address
   ldr   r4, =var_toin     // r4 = >in pointer
   ldr   r2, [r4]          // r2 = >in value
   ldr   r3, const_tibnum  // r3 = tib size
@@ -819,7 +893,7 @@ _accept__read_loop:
   cmp   r2, r0       // backspace?
   subeq r7, r7, #1
   subeq r1, r1, #1
-  str   r1, [rp, #8]
+  streq r1, [rp, #8]
   beq   _accept__read_loop
  
   # Otherwise, store character in buffer and increment count
@@ -829,6 +903,10 @@ _accept__read_loop:
   b     _accept__read_loop
 
 _accept__exit:
+  # Store a space at end of input
+  movw  r0, #0x20
+  strb  r0, [r7]
+
   # Emit a linefeed
   ldr   r0, const_lf
   bl    _emit_
@@ -837,6 +915,222 @@ _accept__exit:
   pop   r0, rp
   pop   r0, rp
 
+  pop   lr, rp
+  bx    lr
+
+// Refills the TIB. Places the number of characters read on the stack
+defword "refill",refill // ( -- n ) 
+  _xt lit
+  _xt 0x0
+  _xt toin
+  _xt store
+  _xt tib
+  _xt fetch
+  _xt tibnum
+  _xt accept
+  _xt exit
+
+###############################################################################
+# STRING PROCESSING                                                           #
+###############################################################################
+
+# Leave the address and length of string beginning at addr1 on the stack
+defcode "count",count // ( addr1 -- addr2 n )
+  mov   r0, tos
+  bl    _count_
+  mov   tos, r1
+  push  r0, sp
+  next
+
+defcode "_count_",_count_
+  ldr   r1, [r0]    // String length
+  add   r0, r0, #4  // Actual string starting address
+  bx    lr
+
+// ud2 is the result of converting the string at c-addr1 with length u1 into a number.
+// each digit in c-addr1 is converted to an integer and added to ud1 after ud1 is multiplied by BASE.
+// c-addr2 is the address after the string or the first non-convertible character in the string and
+// u2 is the # of remaining characters in the string
+defcode ">number",tonumber // ( ud1 c-addr1 u1 -- ud2 c-addr2 u2 )
+  mov   r2, tos // u1
+  pop   r1, sp  // c-addr1
+  pop   r0, sp  // ud1
+  bl    _tonumber_
+  push  r0, sp
+  push  r1, sp
+  mov   tos, r2
+  next
+
+defcode "_>number_",_tonumber_
+  # Assume no leading '-'
+  ldr   r3, var_base // Get BASE
+
+_tonumber__loop:
+  cmp   r2, #0
+  beq   _tonumber__exit
+
+  ldrb  r5, [r1]
+  
+  # Check if 'A' <= char < ('A' + (BASE-10))
+  cmp   r5, #0x61
+  blt   _tonumber__lowercase
+  sub   r4, r3, #10
+  add   r4, r4, #0x61
+  cmp   r4, r5
+  ble   _tonumber__lowercase
+  sub   r5, r5, #0x61
+  add   r5, r5, #10
+  mla   r0, r0, r3, r5       // Multiply r0 with BASE and add the converted digit
+  add   r1, r1, #1           // Update string address pointer
+  sub   r2, r2, #1           // Update character count
+  b     _tonumber__loop
+
+_tonumber__lowercase:
+  # Check if 'a' <= char < ('a' + (BASE - 10))
+  cmp   r5, #0x41
+  blt   _tonumber__digit
+  sub   r4, r3, #10
+  add   r4, r4, #0x61
+  cmp   r4, r5
+  ble   _tonumber__digit
+  sub   r5, r5, #0x41
+  add   r5, r5, #10
+  mla   r0, r0, r3, r5       // Multiply r0 with BASE and add the converted digit
+  add   r1, r1, #1           // Update string address pointer
+  sub   r2, r2, #1           // Update character count
+  b     _tonumber__loop
+
+_tonumber__digit:
+  # Check if '0' <= char < (0x30 + BASE | 0x3A)
+  cmp   r5, #0x30
+  blt   _tonumber__separator
+  cmp   r3, #0xA
+  movge r4, #0xA
+  movlt r4, r3
+  add   r4, r4, #0x30
+  cmp   r4, r5
+  ble   _tonumber__separator
+  sub   r5, r5, #0x30
+  mla   r0, r0, r3, r5       // Multiply r0 with BASE and add the converted digit
+  add   r1, r1, #1           // Update string address pointer
+  sub   r2, r2, #1           // Update character count
+  b     _tonumber__loop
+
+_tonumber__separator:
+  # Ignore '.' and ','
+  cmp   r5, #0x2e
+  addeq r1, r1, #1           // Update string address pointer
+  subeq r2, r2, #1           // Update character count
+  beq   _tonumber__loop
+  cmp   r5, #0x2c
+  addeq r1, r1, #1           // Update string address pointer
+  subeq r2, r2, #1           // Update character count
+  beq   _tonumber__loop
+
+_tonumber__exit:
+  bx    lr
+
+# Converts a string into a number if possible and puts it on the stack.
+# If it can't convert then nothing on stack
+# Takes into account negative numbers and '0x' or '0b'
+defcode "number",number // ( c-addr n -- ? num )
+  mov   r2, tos // n
+  pop   r1, sp  // c-addr
+  movw  r0, #0  // ud1
+  pop   tos, sp
+
+  # Check if '-'
+  ldrb  r3, [r1]
+  cmp   r3, #0x2d 
+  addeq r1, r1, #1
+  subeq r2, r2, #1
+  moveq r3, #0x1
+  streq r3, [rp, #-4]!
+
+  # Check for leading 0
+  ldrb  r4, [r1]
+  cmp   r4, #0x30
+  addeq r1, r1, #1
+  subeq r2, r2, #1
+
+  # Check for "x" or "X" if base = 16
+  ldr   r4, var_base
+  cmp   r4, #16
+  bne   number_checkbinaryprefix
+  ldrb  r5, [r1]
+  cmp   r5, #0x58
+  addeq r1, r1, #1
+  subeq r2, r2, #1
+  beq   number_goto__number_
+  cmp   r5, #0x78
+  addeq r1, r1, #1
+  subeq r2, r2, #1
+  beq   number_goto__number_
+
+number_checkbinaryprefix:
+  # Check for "b" or "B" if base = 2
+  cmp   r4, #2
+  bne   number_goto__number_
+  ldrb  r5, [r1]
+  cmp   r5, #0x42
+  addeq r1, r1, #1
+  subeq r2, r2, #1
+  beq   number_goto__number_
+  cmp   r5, #0x62
+  addeq r1, r1, #1
+  subeq r2, r2, #1
+  
+number_goto__number_:
+  bl    _tonumber_
+
+  # 2's complement number if negative
+  ldr   r3, [rp], #4
+  cmp   r3, #0x1
+  mvneq r0, r0
+  addeq r0, r0, #1
+
+  # Make sure word was fully converted or else fail
+  cmp   r2, #0
+  streq tos, [sp, #-4]!
+  moveq tos, r0
+  next
+
+# Prints number on stack
+defcode ".",dot // ( n -- )
+  mov   r0, tos
+  pop   tos, sp
+  bl    _dot_
+  next
+
+defcode "_._",_dot_
+  push  lr, rp
+
+  ldr   r7, var_base
+  mov   r1, r7 // BASE
+  movw  r6, #0 // digit count
+
+  # Convert all the digits and push on the stack
+_dot__divmod_loop:
+  bl    _divmod_
+  cmp   r1, #0   // Quotient == 0?
+  str   r0, [rp, #-4]!
+  add   r6, r6, #1
+  mov   r0, r1
+  mov   r1, r7
+  bne   _dot__divmod_loop
+
+_dot__convert_to_char_loop:
+  cmp   r6, #0 // digit count == 0?
+  beq   _dot__exit
+  ldr   r0, [rp], #4
+  sub   r6, r6, #1
+  subs  r0, r0, #10
+  addmi r0, r0, #0x3a
+  addpl r0, r0, #0x61
+  bl    _emit_
+  b     _dot__convert_to_char_loop
+
+_dot__exit:
   pop   lr, rp
   bx    lr
 
@@ -853,18 +1147,54 @@ defword "prompt",prompt // ( -- )
   _xt emit
   _xt exit
 
-# Leave the address and length of string beginning at addr1 on the stack
-defcode "count",count // ( addr1 -- addr2 n )
-  mov   r0, tos
-  bl    _count_
-  mov   tos, r1
-  push  r0, sp
-  next
+// Print the contents of the stack before the standard prompt
+defcode "stackprompt",stackprompt // ( -- )
+  movw  r0, #0x28 // print a left parenthesis and space
+  bl    _emit_
+  movw  r0, #0x20 
+  bl    _emit_
 
-defcode "_count_",_count_
-  ldr   r1, [r0]    // String length
-  add   r0, r0, #4  // Actual string starting address
-  bx    lr
+  ldr   r1, var_spz
+  sub   r1, r1, #4 // skip 0xdeadbeef
+  str   r1, [rp, #-4]!
+
+  # Loop through stack contents starting from bottom of stack
+stackprompt_loop:
+  ldr   r1, [rp]
+  sub   r1, r1, #4
+  cmp   r1, sp
+  ldrge r0, [r1]
+  strge r1, [rp]
+  blge  _dot_
+  movge r0, #0x20
+  blge  _emit_
+  bge   stackprompt_loop
+
+  # Print tos
+  mov   r0, tos
+  movw  r1, #0xbeef
+  movt  r1, #0xdead
+  cmp   r0, r1
+  blne  _dot_
+  movne r0, #0x20
+  blne  _emit_
+
+  # Print right parenthesis
+  movw  r0, #0x20
+  bl   _emit_
+  movw  r0, #0x29
+  bl    _emit_
+  movw  r0, #0x20
+  bl   _emit_
+
+  # Print OK
+  movw r0, #0x4f
+  bl   _emit_
+  movw r0, #0x4b
+  bl   _emit_
+  movw r0, #0x20
+  bl   _emit_
+  next
 
 defvar "latest",latest,name_latest // Last entry in Forth dictionary
 
