@@ -226,6 +226,7 @@ defword "quit",quit // ( -- )
   _xt rstore
   _xt prompt
   _xt refill
+  _xt drop
   _xt parseline
   _xt quit
 
@@ -912,7 +913,7 @@ _accept__exit:
   bx    lr
 
 // Refills the TIB
-defword "refill",refill // ( -- ) 
+defword "refill",refill // ( -- true | false ) 
   _xt lit
   _xt 0x0
   _xt toin
@@ -924,6 +925,8 @@ defword "refill",refill // ( -- )
   _xt accept
   _xt numtib
   _xt store
+  _xt lit
+  _xt 0xffffffff
   _xt exit
 
 ###############################################################################
