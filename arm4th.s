@@ -1221,14 +1221,14 @@ defcode "_find_",_find_
   bl    _count_
   cmp   r1, #0
   moveq r7, #0
-  beq   _find__exit // String length is zero!
+  beq   _find__done // String length is zero!
 
   ldr   r2, var_latest
   mov   r7, #0 // Found or not found
 
 _find__loop:
   cmp   r2, org
-  beq   _find__exit // Stop if 0 link pointer 
+  beq   _find__done // Stop if 0 link pointer 
   ldrb  r4, [r2, #5]
   cmp   r4, r1 // Check if name lengths are the same
   ldrne r2, [r2]
@@ -1240,7 +1240,7 @@ _find__loop:
 _find__match:
   cmp   r4, #0
   movle r7, #1  // Found it!
-  ble   _find__exit
+  ble   _find__done
   sub   r4, r4, #1
   ldrb  r5, [r3, r4]
   ldrb  r6, [r0, r4]
@@ -1249,26 +1249,39 @@ _find__match:
   ldrne r2, [r2]
   bne   _find__loop // If strings don't match, keep searching dictionary
 
-_find__exit:
-  pop   lr, rp
-
+_find__done:
   cmp   r7, #0
   moveq r1, #0
   subeq r0, r0, #1
-  bxeq  lr
+  beq   _find__exit
 
-  add   r0, r2, #6
-  add   r0, r0, r1 // Get execution token
-  ands  r7, r0, #0x3 // Round to next 4-byte boundary
-  mvnne r7, #0x3
-  andne r0, r0, r7
-  addne r0, r0, #0x4
-
+  mov   r0, r2
+  bl    _tobody_
+  
   mov   r1, #-1
   ldr   r7, [r2, #4] // Check if immediate
   ands  r7, r7, #0x80
   movne r1, #1 // It is immediate
 
+_find__exit:
+  pop   lr, rp
+  bx    lr
+
+# Get the address to the word's parameter list
+defcode ">body",tobody // ( addr1 -- addr2 )
+  mov   r0, tos
+  bl    _tobody_
+  mov   tos, r0
+  next
+
+defcode "_>body_",_tobody_
+  ldrb  r1, [r0, #5]
+  add   r0, r0, #6
+  add   r0, r0, r1 // skip header
+  ands  r7, r0, #0x3 // Round to next 4-byte boundary
+  mvnne r7, #0x3
+  andne r0, r0, r7
+  addne r0, r0, #0x4
   bx    lr
 
 # Jump to the Forth Word execution token provided on the stack
