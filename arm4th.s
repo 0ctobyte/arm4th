@@ -142,8 +142,8 @@ _start:
   movt  r0, #0xdead
   mov   tos, r0
 
-  # Finally set the ip to startforth
-  ldr   ip, =startforth
+  # Finally set the ip to cold
+  ldr   ip, =cold
   add   ip, ip, org
 
   # Go to init!
@@ -197,7 +197,7 @@ wdt_done:
 #endif
 
 # Start running the Forth interpreter
-startforth:
+cold:
   _xt lit
   _xt 16
   _xt base
@@ -226,9 +226,7 @@ defword "quit",quit // ( -- )
   _xt rstore
   _xt prompt
   _xt refill
-  _xt bl
-  _xt word
-  _xt find
+  _xt parseline
   _xt quit
 
 defconst "version",version,__VERSION      // Forth version
@@ -1223,7 +1221,7 @@ defcode "_find_",_find_
   mov   r7, #0 // Found or not found
 
 _find__loop:
-  cmp   r2, #0
+  cmp   r2, org
   beq   _find__exit // Stop if 0 link pointer 
   ldrb  r4, [r2, #5]
   cmp   r4, r1 // Check if name lengths are the same
@@ -1250,6 +1248,7 @@ _find__exit:
 
   cmp   r7, #0
   moveq r1, #0
+  subeq r0, r0, #1
   bxeq  lr
 
   add   r0, r2, #6
@@ -1264,6 +1263,52 @@ _find__exit:
   ands  r7, r7, #0x80
   movne r1, #1 // It is immediate
 
+  bx    lr
+
+# Jump to the Forth Word execution token provided on the stack
+defcode "execute",execute // ( xt -- )
+  mov   r0, tos
+  pop   tos, sp
+  blx   r0
+  next
+
+defcode "parseline",parseline // ( n -- )
+  mov   r0, tos
+  pop   tos, sp
+  push  r0, rp
+parseline_loop:
+  ldr   r0, [rp]
+  bl    _interpret_
+  ldr   r0, [rp]
+  ldr   r1, var_toin
+  cmp   r1, r0 // >in < n?
+  blt   parseline_loop
+  pop   r0, rp
+  next
+
+defcode "interpret",interpret // ( n -- )
+  mov   r0, tos
+  pop   tos, sp
+  bl    _interpret_
+  next
+
+defcode "_interpret_",_interpret_
+  push  lr, rp
+
+  ldr   r1, const_bl
+  bl    _word_
+  bl    _find_
+  cmp   r1, #0
+  strne tos, [sp, #-4]!
+  movne tos, r0
+  blne  execute
+  
+  bl    _questionnumber_
+  cmp   r1, #0
+  strne tos, [sp, #-4]!
+  movne tos, r0
+  
+  pop   lr, rp
   bx    lr
 
 defvar "latest",latest,name_latest+ORIGIN // Last entry in Forth dictionary
