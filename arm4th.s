@@ -676,7 +676,7 @@ defconst "uartfr",uartfr,0x18     // UART flag register
 #endif
 
 defvar   "tib",tib,DRAM+0x100        // Location of text input buffer
-defconst "tib#",tibnum,0x400         // 1k tib
+defvar   "#tib",numtib,0x0           // Current # of chars in TIB
 defvar   ">in",toin,0x0              // Current parse area in tib
 
 defconst "bl",bl,0x20 // space ascii character
@@ -790,20 +790,18 @@ _key__LOOP:
   ldr   r0, [r1, r3]
   bx    lr
 
-# Reads a string of n characters from the input buffer delimited by 'char'
+# Reads a string of #tib characters from the input buffer delimited by 'char'
 # places the address of the string on the stack, (the first word of the string contains
 # the length of the string)
-defcode "word",word // ( n char -- addr )
-  pop   r0, sp
-  mov   r1, tos
+defcode "word",word // ( char -- addr )
+  mov   r0, tos
   bl    _word_
   mov   tos, r0
   next
 
 defcode "_word_",_word_
   push  lr, rp
-  mov   r7, r1            // r7 = delimiter
-  mov   r3, r0            // String length
+  mov   r7, r0            // r7 = delimiter
   ldr   r6, const_pad
   add   r6, r6, #1        // r6 = pad
   push  r6, rp            // will need this later to calculate word size
@@ -812,6 +810,7 @@ defcode "_word_",_word_
   ldr   r4, =var_toin     
   add   r4, r4, org       // r4 = >in pointer 
   ldr   r2, [r4]          // r2 = >in value
+  ldr   r3, var_numtib    // TIB string length
 
   # Skip leading delimiters
 _word__skip_loop:
@@ -912,16 +911,19 @@ _accept__exit:
   pop   lr, rp
   bx    lr
 
-// Refills the TIB. Puts the length of the string on the stack 
-defword "refill",refill // ( -- n ) 
+// Refills the TIB
+defword "refill",refill // ( -- ) 
   _xt lit
   _xt 0x0
   _xt toin
   _xt store
   _xt tib
   _xt fetch
-  _xt tibnum
+  _xt lit
+  _xt 0x400
   _xt accept
+  _xt numtib
+  _xt store
   _xt exit
 
 ###############################################################################
@@ -1105,6 +1107,7 @@ questionnumber__tonumber_:
   mov   r1, #0
   cmp   r2, #0
   mvneq r1, r1 // r0 = n, r1 = true
+  subne r3, r3, #1
   movne r0, r3 // r0 = c-addr, r1 = false
 
 questionnumber_exit:
@@ -1191,9 +1194,9 @@ prompt_loop:
   bl    _emit_
 
   # Print OK
-  movw  r0, #0x4f
+  movw  r0, #0x6f
   bl    _emit_
-  movw  r0, #0x4b
+  movw  r0, #0x6b
   bl    _emit_
   movw  r0, #0x20
   bl    _emit_
@@ -1272,30 +1275,23 @@ defcode "execute",execute // ( xt -- )
   blx   r0
   next
 
-defcode "parseline",parseline // ( n -- )
-  mov   r0, tos
-  pop   tos, sp
-  push  r0, rp
+defcode "parseline",parseline // ( -- )
 parseline_loop:
-  ldr   r0, [rp]
   bl    _interpret_
-  ldr   r0, [rp]
+  ldr   r0, var_numtib
   ldr   r1, var_toin
   cmp   r1, r0 // >in < n?
   blt   parseline_loop
-  pop   r0, rp
   next
 
-defcode "interpret",interpret // ( n -- )
-  mov   r0, tos
-  pop   tos, sp
+defcode "interpret",interpret // ( -- )
   bl    _interpret_
   next
 
 defcode "_interpret_",_interpret_
   push  lr, rp
 
-  ldr   r1, const_bl
+  ldr   r0, const_bl
   bl    _word_
   bl    _find_
   cmp   r1, #0
