@@ -221,7 +221,7 @@ defcode "exit",exit // ( -- )
 defword "quit",quit // ( -- )
   _xt rpz
   _xt rstore
-  _xt stackprompt
+  _xt prompt
   _xt refill
   _xt bl
   _xt word
@@ -1030,24 +1030,33 @@ _tonumber__exit:
 # Converts a string into a number if possible and puts it on the stack.
 # If it can't convert then nothing on stack
 # Takes into account negative numbers and '0x' or '0b'
-# TODO: This should be ( c-addr n -- n -1 | c-addr 0 )
-defcode "number",number // ( c-addr n -- ? num )
+defcode "number",number // ( c-addr n -- n true | c-addr false )
   mov   r2, tos // n
   pop   r1, sp  // c-addr
   movw  r0, #0  // ud1
-  pop   tos, sp
+  bl    _number_
+  push  r0, sp
+  mov   tos, r1
+  next
+
+defcode "_number_",_number_
+  push  lr, rp
 
   # If n == 0 then nothing to convert
   cmp   r2, #0
+  moveq r0, r1
+  moveq r1, #0
   beq   number_exit
+  push  r1, rp
 
   # Check if '-'
   ldrb  r3, [r1]
   cmp   r3, #0x2d 
   addeq r1, r1, #1
   subeq r2, r2, #1
+  movne r3, #0x0
   moveq r3, #0x1
-  streq r3, [rp, #-4]!
+  push  r3, rp
 
   # Check for leading 0
   ldrb  r4, [r1]
@@ -1086,18 +1095,21 @@ number_goto__number_:
   bl    _tonumber_
 
   # 2's complement number if negative
-  ldr   r3, [rp], #4
+  pop   r3, rp
   cmp   r3, #0x1
   mvneq r0, r0
   addeq r0, r0, #1
-
-  # Make sure word was fully converted or else fail
+ 
+  # Check if word was fully converted to a number
+  pop   r3, rp
+  mov   r1, #0
   cmp   r2, #0
-  streq tos, [sp, #-4]!
-  moveq tos, r0
+  mvneq r1, r1 // r0 = n, r1 = true
+  movne r0, r3 // r0 = c-addr, r1 = false
 
 number_exit:
-  next
+  pop   lr, rp
+  bx    lr
 
 # Prints number on stack
 defcode ".",dot // ( n -- )
@@ -1138,21 +1150,8 @@ _dot__exit:
   pop   lr, rp
   bx    lr
 
-// Print the Forth prompt
-defword "prompt",prompt // ( -- )
-  _xt lit
-  _xt 0x4f
-  _xt emit
-  _xt lit
-  _xt 0x4b
-  _xt emit
-  _xt lit
-  _xt 0x20
-  _xt emit
-  _xt exit
-
 // Print the contents of the stack before the standard prompt
-defcode "stackprompt",stackprompt // ( -- )
+defcode "prompt",prompt // ( -- )
   movw  r0, #0x28 // print a left parenthesis and space
   bl    _emit_
   movw  r0, #0x20 
@@ -1163,7 +1162,7 @@ defcode "stackprompt",stackprompt // ( -- )
   str   r1, [rp, #-4]!
 
   # Loop through stack contents starting from bottom of stack
-stackprompt_loop:
+prompt_loop:
   ldr   r1, [rp]
   sub   r1, r1, #4
   cmp   r1, sp
@@ -1172,7 +1171,7 @@ stackprompt_loop:
   blge  _dot_
   movge r0, #0x20
   blge  _emit_
-  bge   stackprompt_loop
+  bge   prompt_loop
 
   # Print tos
   mov   r0, tos
