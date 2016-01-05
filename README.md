@@ -9,6 +9,7 @@ You will need the `arm-none-eabi-gcc` package as well as `qemu` installed on you
 
 # Build
 `cd arm4th`
+
 `make`
 
 The arm-none-eabi-gcc package must be in your `PATH`.
