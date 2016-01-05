@@ -195,6 +195,10 @@ wdt_done:
 
 # Start running the Forth interpreter
 startforth:
+  _xt lit
+  _xt 16
+  _xt base
+  _xt store
   _xt quit
   _xt bye
 
@@ -249,7 +253,7 @@ defcode "bye",bye // ( -- )
   b     .
 
 # Push the value at ip on the stack and increment ip by 4
-defcode "litera",literal // ( -- )
+defcode "lit",lit // ( -- )
   push  tos, sp
   ldr   tos, [ip], #4
   next
@@ -913,7 +917,7 @@ _accept__exit:
 
 // Refills the TIB. Puts the length of the string on the stack 
 defword "refill",refill // ( -- n ) 
-  _xt literal
+  _xt lit
   _xt 0x0
   _xt toin
   _xt store
@@ -1026,6 +1030,7 @@ _tonumber__exit:
 # Converts a string into a number if possible and puts it on the stack.
 # If it can't convert then nothing on stack
 # Takes into account negative numbers and '0x' or '0b'
+# TODO: This should be ( c-addr n -- n -1 | c-addr 0 )
 defcode "number",number // ( c-addr n -- ? num )
   mov   r2, tos // n
   pop   r1, sp  // c-addr
@@ -1135,13 +1140,13 @@ _dot__exit:
 
 // Print the Forth prompt
 defword "prompt",prompt // ( -- )
-  _xt literal
+  _xt lit
   _xt 0x4f
   _xt emit
-  _xt literal
+  _xt lit
   _xt 0x4b
   _xt emit
-  _xt literal
+  _xt lit
   _xt 0x20
   _xt emit
   _xt exit
