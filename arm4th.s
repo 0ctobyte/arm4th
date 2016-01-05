@@ -808,7 +808,7 @@ defcode "_word_",_word_
   mov   r7, r1            // r7 = delimiter
   mov   r3, r0            // String length
   ldr   r6, const_pad
-  add   r6, r6, #4        // r6 = pad
+  add   r6, r6, #1        // r6 = pad
   push  r6, rp            // will need this later to calculate word size
 
   ldr   r1, var_tib       // r1 = tib address
@@ -829,7 +829,7 @@ _word__skip_loop:
   cmp   r0, r7
   beq   _word__skip_loop
   
-  # Start reading characters into pad+4 
+  # Start reading characters into pad+1 
 _word__read_loop:
   strb  r0, [r6], #1
 
@@ -846,7 +846,7 @@ _word__read_loop:
 _word__exit:
   pop   r0, rp
   sub   r6, r6, r0
-  str   r6, [r0, #-4]!
+  strb  r6, [r0, #-1]!
 
   # Update >in
   str   r2, [r4]
@@ -940,8 +940,8 @@ defcode "count",count // ( addr1 -- addr2 n )
   next
 
 defcode "_count_",_count_
-  ldr   r1, [r0]    // String length
-  add   r0, r0, #4  // Actual string starting address
+  ldrb  r1, [r0]    // String length
+  add   r0, r0, #1  // Actual string starting address
   bx    lr
 
 // ud2 is the result of converting the string at c-addr1 with length u1 into a number.
@@ -1198,6 +1198,19 @@ prompt_loop:
   movw r0, #0x20
   bl   _emit_
   next
+
+# Puts c-addr and false on the stack if word could not be found.
+# If the word was found and it is an immediate word then place the execution
+# token and 1 on the stack otherwise put -1 on the stack.
+defcode "find",find // ( c-addr -- c-addr 0 | xt 1 | xt -1 )
+  mov  r0, tos
+  bl   _find_
+  push r0, sp
+  mov  tos, r1
+  next
+
+defcode "_find_",_find_
+  ldr  r1, var_latest
 
 defvar "latest",latest,name_latest // Last entry in Forth dictionary
 
