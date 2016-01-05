@@ -2,6 +2,9 @@
 # ASSEMBLER MACROS FOR CREATING FORTH DICTIONARY ENTRIES                      #
 ###############################################################################
 
+#define ORIGIN 0x80010000
+#define DRAM 0x80000000
+
 # tos = top of stack
 # up  = "user pointer", points to user area (i.e. data)
 # org = origin == start address of binary image, used to offset ip tokens
@@ -47,8 +50,8 @@ rp  .req r11
 .balign 4
 .global name_\label
 name_\label:
-.int link               // link pointer
-.set link,name_\label   // set link pointer to this word
+.int link+ORIGIN          // link pointer
+.set link,name_\label     // set link pointer to this word
 .byte \flags              // 1 byte for flags
 .byte (12346f - 12345f)   // 1 byte for length
 12345:
@@ -65,8 +68,8 @@ bl enter                  // Forth words always start with enter
 .balign 4
 .global name_\label
 name_\label:
-.int link               // link pointer
-.set link,name_\label   // set link pointer to this word
+.int link+ORIGIN          // link pointer
+.set link,name_\label     // set link pointer to this word
 .byte \flags              // 1 byte for flags
 .byte (12346f - 12345f)   // 1 byte for length
 12345:
@@ -225,12 +228,8 @@ defword "quit",quit // ( -- )
   _xt refill
   _xt bl
   _xt word
-  _xt count
-  _xt questionnumber
+  _xt find
   _xt quit
-
-#define ORIGIN 0x80010000
-#define DRAM 0x80000000
 
 defconst "version",version,__VERSION      // Forth version
 defconst "rp0",rpz,ORIGIN                 // Bottom of return stack
@@ -1030,10 +1029,8 @@ _tonumber__exit:
 # Converts a string into a number if possible and puts it on the stack.
 # If it can't convert then nothing on stack
 # Takes into account negative numbers and '0x' or '0b'
-defcode "?number",questionnumber // ( c-addr n -- n true | c-addr false )
-  mov   r2, tos // n
-  pop   r1, sp  // c-addr
-  movw  r0, #0  // ud1
+defcode "?number",questionnumber // ( c-addr -- n true | c-addr false )
+  mov   r0, tos // c-addr
   bl    _questionnumber_
   push  r0, sp
   mov   tos, r1
@@ -1041,6 +1038,11 @@ defcode "?number",questionnumber // ( c-addr n -- n true | c-addr false )
 
 defcode "_?number_",_questionnumber_
   push  lr, rp
+
+  bl    _count_
+  mov   r2, r1  // n
+  mov   r1, r0  // c-addr
+  movw  r0, #0  // u
 
   # If n == 0 then nothing to convert
   cmp   r2, #0
@@ -1184,35 +1186,87 @@ prompt_loop:
 
   # Print right parenthesis
   movw  r0, #0x20
-  bl   _emit_
+  bl    _emit_
   movw  r0, #0x29
   bl    _emit_
   movw  r0, #0x20
-  bl   _emit_
+  bl    _emit_
 
   # Print OK
-  movw r0, #0x4f
-  bl   _emit_
-  movw r0, #0x4b
-  bl   _emit_
-  movw r0, #0x20
-  bl   _emit_
+  movw  r0, #0x4f
+  bl    _emit_
+  movw  r0, #0x4b
+  bl    _emit_
+  movw  r0, #0x20
+  bl    _emit_
   next
 
 # Puts c-addr and false on the stack if word could not be found.
 # If the word was found and it is an immediate word then place the execution
 # token and 1 on the stack otherwise put -1 on the stack.
 defcode "find",find // ( c-addr -- c-addr 0 | xt 1 | xt -1 )
-  mov  r0, tos
-  bl   _find_
-  push r0, sp
-  mov  tos, r1
+  mov   r0, tos
+  bl    _find_
+  push  r0, sp
+  mov   tos, r1
   next
 
 defcode "_find_",_find_
-  ldr  r1, var_latest
+  push  lr, rp
 
-defvar "latest",latest,name_latest // Last entry in Forth dictionary
+  bl    _count_
+  cmp   r1, #0
+  moveq r7, #0
+  beq   _find__exit // String length is zero!
+
+  ldr   r2, var_latest
+  mov   r7, #0 // Found or not found
+
+_find__loop:
+  cmp   r2, #0
+  beq   _find__exit // Stop if 0 link pointer 
+  ldrb  r4, [r2, #5]
+  cmp   r4, r1 // Check if name lengths are the same
+  ldrne r2, [r2]
+  bne   _find__loop
+
+  # Attempt to match the strings
+  add   r3, r2, #6
+
+_find__match:
+  cmp   r4, #0
+  movle r7, #1  // Found it!
+  ble   _find__exit
+  sub   r4, r4, #1
+  ldrb  r5, [r3, r4]
+  ldrb  r6, [r0, r4]
+  cmp   r5, r6
+  beq   _find__match
+  ldrne r2, [r2]
+  bne   _find__loop // If strings don't match, keep searching dictionary
+
+_find__exit:
+  pop   lr, rp
+
+  cmp   r7, #0
+  moveq r1, #0
+  bxeq  lr
+
+  add   r0, r2, #6
+  add   r0, r0, r1 // Get execution token
+  ands  r7, r0, #0x3 // Round to next 4-byte boundary
+  mvnne r7, #0x3
+  andne r0, r0, r7
+  addne r0, r0, #0x4
+
+  mov   r1, #-1
+  ldr   r7, [r2, #4] // Check if immediate
+  ands  r7, r7, #0x80
+  movne r1, #1 // It is immediate
+
+  bx    lr
+
+defvar "latest",latest,name_latest+ORIGIN // Last entry in Forth dictionary
 
 .balign 4
 __here:
