@@ -226,7 +226,7 @@ defword "quit",quit // ( -- )
   _xt bl
   _xt word
   _xt count
-  _xt number
+  _xt questionnumber
   _xt quit
 
 #define ORIGIN 0x80010000
@@ -1030,23 +1030,23 @@ _tonumber__exit:
 # Converts a string into a number if possible and puts it on the stack.
 # If it can't convert then nothing on stack
 # Takes into account negative numbers and '0x' or '0b'
-defcode "number",number // ( c-addr n -- n true | c-addr false )
+defcode "?number",questionnumber // ( c-addr n -- n true | c-addr false )
   mov   r2, tos // n
   pop   r1, sp  // c-addr
   movw  r0, #0  // ud1
-  bl    _number_
+  bl    _questionnumber_
   push  r0, sp
   mov   tos, r1
   next
 
-defcode "_number_",_number_
+defcode "_?number_",_questionnumber_
   push  lr, rp
 
   # If n == 0 then nothing to convert
   cmp   r2, #0
   moveq r0, r1
   moveq r1, #0
-  beq   number_exit
+  beq   questionnumber_exit
   push  r1, rp
 
   # Check if '-'
@@ -1067,31 +1067,31 @@ defcode "_number_",_number_
   # Check for "x" or "X" if base = 16
   ldr   r4, var_base
   cmp   r4, #16
-  bne   number_checkbinaryprefix
+  bne   questionnumber_checkbinaryprefix
   ldrb  r5, [r1]
   cmp   r5, #0x58
   addeq r1, r1, #1
   subeq r2, r2, #1
-  beq   number_goto__number_
+  beq   questionnumber__tonumber_
   cmp   r5, #0x78
   addeq r1, r1, #1
   subeq r2, r2, #1
-  beq   number_goto__number_
+  beq   questionnumber__tonumber_
 
-number_checkbinaryprefix:
+questionnumber_checkbinaryprefix:
   # Check for "b" or "B" if base = 2
   cmp   r4, #2
-  bne   number_goto__number_
+  bne   questionnumber__tonumber_
   ldrb  r5, [r1]
   cmp   r5, #0x42
   addeq r1, r1, #1
   subeq r2, r2, #1
-  beq   number_goto__number_
+  beq   questionnumber__tonumber_
   cmp   r5, #0x62
   addeq r1, r1, #1
   subeq r2, r2, #1
   
-number_goto__number_:
+questionnumber__tonumber_:
   bl    _tonumber_
 
   # 2's complement number if negative
@@ -1107,7 +1107,7 @@ number_goto__number_:
   mvneq r1, r1 // r0 = n, r1 = true
   movne r0, r3 // r0 = c-addr, r1 = false
 
-number_exit:
+questionnumber_exit:
   pop   lr, rp
   bx    lr
 
