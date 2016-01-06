@@ -1015,7 +1015,7 @@ defword "quit",quit
   _xt rpz
   _xt rpstore
   _xt prompt
-  _xt pad
+  _xt dram 
   _xt lit
   _xt 0x100
   _xt plus
@@ -1079,7 +1079,6 @@ defcode "tuck",tuck
 # Reads a string of #tib characters from the input buffer delimited by 'char'
 # places the address of the string on the stack, (the first word of the string contains
 # the length of the string)
-# TODO: SHOULD NOT USE PAD
 # ( char "<char>cccc<char>" -- c-addr )
 defcode "word",word
   mov     r0, tos
@@ -1090,10 +1089,9 @@ defcode "word",word
 defcode "_word_",_word_
   push    lr, rp
   mov     r7, r0             // r7 = delimiter
-
-  bl      _pad_
-  mov     r6, r0
-  add     r6, r6, #1         // r6 = pad
+  
+  ldr     r6, var__here_
+  add     r6, r6, #1         // r6 = here+1
   push    r6, rp             // will need this later to calculate word size
 
   ldr     r1, var__tib_      // r1 = tib address
@@ -1113,7 +1111,7 @@ _word__skip_loop:
   cmp     r0, r7
   beq     _word__skip_loop
   
-  # Start reading characters into pad+1 
+  # Start reading characters into here+1 
 _word__read_loop:
   strb    r0, [r6], #1
 
@@ -1485,7 +1483,11 @@ defcode "rp!",rpstore
   next
 
 # Bottom of data stack
+# ( -- addr )
 defvar "sp0",spz,ORIGIN-0x400
+
+# Base of DRAM
+defconst "dram",dram,DRAM
 
 # Last entry in Forth dictionary
 defvar "latest",latest,name_latest+ORIGIN
