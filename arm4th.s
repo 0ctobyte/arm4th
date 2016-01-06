@@ -120,7 +120,8 @@ _start:
 
   # enable the UART FIFO on the BeagleBone
   movw    r0, #0x1
-  ldr     r1, const_uart0
+  movw    r1, #0x9000
+  movt    r1, #0x44e0
   str     r0, [r1, #0x8]
 #endif
   
