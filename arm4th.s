@@ -234,13 +234,17 @@ defcode "+!",plus_store
 
 # Store x at HERE and increment HERE by 4
 # ( x -- )
-defcode ",",comma
-  mov     r0, tos
-  pop     tos, sp
-  ldr     r1, var__here_
-  str     r0, [r1], #4
-  str     r1, var__here_
-  next
+ defcode ",",comma
+   mov     r0, tos
+   pop     tos, sp
+   bl      _comma_
+   next
+
+defcode "_,_",_comma_
+   ldr     r1, var__here_
+   str     r0, [r1], #4
+   str     r1, var__here_
+   bx      lr
 
 # Subtract
 # ( n0 n1 -- n2 )
@@ -417,6 +421,30 @@ defcode "2swap",twoswap
   push    r2, sp
   mov     tos, r2
   next
+
+# Create a new colon definition for a name
+# ( "<spaces>name" -- )
+defword ":",colon
+  _xt create
+  _xt lit
+  _xt enter+ORIGIN
+  _xt comma
+  _xt latest
+  _xt fetch
+  _xt hidden
+  _xt right_bracket
+  _xt exit
+
+# End a colon definition
+defword ";",semicolon
+  _xt lit
+  _xt exit+ORIGIN
+  _xt comma
+  _xt latest
+  _xt fetch
+  _xt unhidden
+  _xt left_bracket
+  _xt exit
 
 # ( n0 n1 -- flag )
 defcode "<",less_than 
@@ -959,6 +987,16 @@ defword "here",here
 # Next free byte in dictionary
 defvar "_here_",_here_,ORIGIN+__here   
 
+# Marks the latest definition as IMMEDIATE
+# ( -- )
+defcode "immediate",immediate
+  ldr     r0, var_latest
+  mov     r1, #0x80
+  ldr     r2, [r0, #4]
+  orr     r1, r1, r2
+  str     r1, [r0, #4]
+  next
+
 # Bitwise not of n0
 # ( n0 -- n1 )
 defcode "invert",invert
@@ -999,6 +1037,24 @@ _key__LOOP:
 
   # Read character from RX FIFO
   ldr     r0, [r1, r3]
+  bx      lr
+
+# Run-time semantics: Place x on the stack
+# ( x -- )
+defcode "literal",literal
+  mov     r0, tos
+  pop     tos, r0
+  bl      _literal_
+  next
+
+defcode "_literal_",_literal_
+  push    lr, rp
+  mov     r1, r0
+  ldr     r0, =lit
+  add     r0, r0, org
+  bl      _comma_
+  mov     r0, r1
+  bl      _comma_
   bx      lr
 
 # Modulo
@@ -1187,6 +1243,20 @@ _word__exit:
 defcode "xor",xor 
   pop     r0, sp
   eor     tos, r0, tos
+  next
+
+# Enter interpretation state
+# ( -- )
+defcode "[",left_bracket,F_IMMED
+  movw    r0, #0
+  str     r0, var_state
+  next
+
+# Enter compilation state
+# ( -- )
+defcode "]",right_bracket
+  movw    r0, #1
+  str     r0, var_state
   next
 
 ###############################################################################
@@ -1424,11 +1494,25 @@ question_number_exit:
   pop   lr, rp
   bx    lr
 
+# Base of DRAM
+defconst "dram",dram,DRAM
+
 # Prologue to every high-level Forth word
 # ( -- ) ( R: -- addr )
 defcode "enter",enter
   push    ip, rp
   mov     ip, lr
+  next
+
+# Makes the definition specified by a-addr hidden 
+# ( a-addr -- )
+defcode "hidden",hidden
+  mov     r0, tos
+  pop     tos, sp
+  mov     r1, #0x40
+  ldr     r2, [r0, #4]
+  orr     r1, r1, r2
+  str     r1, [r0, #4]
   next
 
 # halt
@@ -1461,9 +1545,10 @@ defcode "_interpret_",_interpret_
   pop   lr, rp
   bx    lr
 
+# Run-time semantics of LITERAL
 # Push the value at ip on the stack and increment ip by 4
 # ( -- n )
-defcode "lit",lit 
+defcode "(literal)",lit 
   push    tos, sp
   ldr     tos, [ip], #4
   next
@@ -1533,8 +1618,16 @@ defcode "rp!",rpstore
 # ( -- addr )
 defvar "sp0",spz,ORIGIN-0x400
 
-# Base of DRAM
-defconst "dram",dram,DRAM
+# Makes the definition specified by a-addr unhidden 
+# ( a-addr -- )
+defcode "unhidden",unhidden
+  mov     r0, tos
+  pop     tos, sp
+  mvn     r1, #0x40
+  ldr     r2, [r0, #4]
+  and     r1, r1, r2
+  str     r1, [r0, #4]
+  next
 
 # Last entry in Forth dictionary
 defvar "latest",latest,name_latest+ORIGIN
