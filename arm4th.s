@@ -622,9 +622,8 @@ _accept__exit:
 # ( -- )
 defword "align",align
   _xt here
-  _xt dup
   _xt aligned
-  _xt swap
+  _xt _here_ 
   _xt store
   _xt exit
 
@@ -693,6 +692,9 @@ _char__skip_loop:
   cmp     r0, r7
   beq     _char__skip_loop
 
+  # Update >in
+  str     r2, var_to_in
+
 _char__exit:
   bx      lr
 
@@ -735,8 +737,11 @@ defword "decimal",decimal
 # The number of items on the data stack before n was placed on the stack
 # ( -- n )
 defcode "depth",depth
-  ldr     r0, var_spz
-  sub     r0, r0, sp
+  push    tos, sp
+  ldr     tos, var_spz
+  sub     tos, tos, sp
+  sub     tos, tos, #1
+  lsr     tos, tos, #2
   next
 
 # Drop top of stack
@@ -826,9 +831,11 @@ defcode "fill",fill
 defcode "_fill_",_fill_
 _fill__loop:
   cmp     r1, #0
-  subne   r1, r1, #1
-  #strbne  r2, [r0, r1]
-  bne     _fill__loop
+  beq     _fill__exit
+  sub     r1, r1, #1
+  strb    r2, [r0, r1]
+  b       _fill__loop
+_fill__exit:
   bx      lr
 
 # Puts c-addr and false on the stack if word could not be found.
