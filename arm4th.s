@@ -232,6 +232,16 @@ defcode "+!",plus_store
   pop     tos, sp
   next
 
+# Store x at HERE and increment HERE by 4
+# ( x -- )
+defcode ",",comma
+  mov     r0, tos
+  pop     tos, sp
+  ldr     r1, var__here_
+  str     r0, [r1], #4
+  str     r1, var__here_
+  next
+
 # Subtract
 # ( n0 n1 -- n2 )
 defcode "-",minus
@@ -726,6 +736,23 @@ defcode "_cr_",_cr_
   pop     lr, rp
   next
 
+defword "create",create
+  _xt align
+  _xt here
+  _xt latest
+  _xt fetch
+  _xt comma
+  _xt latest
+  _xt store
+  _xt bl
+  _xt word
+  _xt count
+  _xt plus
+  _xt _here_
+  _xt store
+  _xt align
+  _xt exit
+
 # Change the base to decimal
 # ( -- )
 defword "decimal",decimal
@@ -1100,7 +1127,7 @@ defcode "_word_",_word_
 
   # Skip leading delimiters
 _word__skip_loop:
-  # Check if end of TIB and exit with 0 length word
+  # Check if end of TIB
   cmp     r2, r3
   bge     _word__exit
 
