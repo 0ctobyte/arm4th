@@ -629,6 +629,15 @@ _accept__exit:
   pop     lr, rp
   bx      lr
 
+# Reserve n bytes at HERE
+# ( n -- )
+defword "allot",allot
+  _xt here
+  _xt plus
+  _xt _here_
+  _xt store
+  _xt exit
+
 # Align the HERE pointer
 # ( -- )
 defword "align",align
@@ -676,6 +685,12 @@ defcode "c@",c_fetch
   ldrb    tos, [r0]
   next
 
+# n1 is the size in address units of n0 cells
+# ( n0 -- n1 )
+defcode "cells",cells
+  lsl     tos, tos, #2
+  next
+
 # Get the ASCII character of the first character in name
 # ( "<spaces>name" -- char )
 defcode "char",char
@@ -708,6 +723,11 @@ _char__skip_loop:
 
 _char__exit:
   bx      lr
+
+# n1 is the size in address units of n0 characters
+# ( n0 -- n1 )
+defword "chars",chars
+  _xt exit
 
 # Leave the address and length of string beginning at addr1 on the stack
 # ( c-addr0 -- c-addr1 u ) 
@@ -747,9 +767,9 @@ defword "create",create
   _xt bl
   _xt word
   _xt count
-  _xt plus
-  _xt _here_
-  _xt store
+  _xt nip
+  _xt one_plus
+  _xt allot
   _xt align
   _xt exit
 
