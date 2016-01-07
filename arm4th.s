@@ -428,6 +428,20 @@ defword ":",colon
   _xt create
   _xt lit
   _xt enter+ORIGIN
+  _xt here
+  _xt minus
+  _xt lit
+  _xt 8
+  _xt minus
+  _xt lit
+  _xt 2
+  _xt rshift
+  _xt lit
+  _xt 0x00ffffff
+  _xt and
+  _xt lit
+  _xt 0xeb000000
+  _xt or
   _xt comma
   _xt latest
   _xt fetch
@@ -436,9 +450,9 @@ defword ":",colon
   _xt exit
 
 # End a colon definition
-defword ";",semicolon
+defword ";",semicolon,F_IMMED
   _xt lit
-  _xt exit+ORIGIN
+  _xt exit
   _xt comma
   _xt latest
   _xt fetch
@@ -792,6 +806,14 @@ defword "create",create
   _xt comma
   _xt latest
   _xt store
+  _xt lit
+  _xt 0x0
+  _xt here
+  _xt store
+  _xt here
+  _xt one_plus
+  _xt _here_
+  _xt store
   _xt bl
   _xt word
   _xt count
@@ -1049,13 +1071,21 @@ defcode "literal",literal
 
 defcode "_literal_",_literal_
   push    lr, rp
-  mov     r1, r0
-  ldr     r0, =lit
-  add     r0, r0, org
+  mov     r7, r0
+  ldr     r0, const___lit
+  sub     r0, r0, org
   bl      _comma_
-  mov     r0, r1
+  mov     r0, r7
   bl      _comma_
+  pop     lr, rp
   bx      lr
+
+# Logical left shift
+# ( x0 u -- x1 )
+defcode "lshift",lshift
+  pop     r0, sp
+  lsl     tos, r0, tos
+  next
 
 # Modulo
 # ( n0 n1 -- n2 )
@@ -1149,6 +1179,13 @@ defcode "rot",rot
   push    tos, sp
   push    r1, sp
   mov     tos, r0
+  next
+
+# Logical right shift
+# ( x0 u -- x1 )
+defcode "rshift",rshift
+  pop     r0, sp
+  lsr     tos, r0, tos
   next
 
 # Current state: interpret (0) or compile (1)
@@ -1494,6 +1531,13 @@ question_number_exit:
   pop   lr, rp
   bx    lr
 
+# Arithmetic right shift
+# ( x0 u -- x1 )
+defcode "asr",asr
+  pop     r0, sp
+  asr     tos, r0, tos
+  next
+
 # Base of DRAM
 defconst "dram",dram,DRAM
 
@@ -1510,9 +1554,9 @@ defcode "hidden",hidden
   mov     r0, tos
   pop     tos, sp
   mov     r1, #0x40
-  ldr     r2, [r0, #4]
+  ldrb    r2, [r0, #4]
   orr     r1, r1, r2
-  str     r1, [r0, #4]
+  strb    r1, [r0, #4]
   next
 
 # halt
@@ -1523,27 +1567,49 @@ defcode "halt",halt
 # TODO
 # ( c-addr u -- )
 defcode "interpret",interpret
-  bl    _interpret_
+  bl      _interpret_
   next
 
 defcode "_interpret_",_interpret_
-  push  lr, rp
+  push    lr, rp
 
-  ldr   r0, const_bl
-  bl    _word_
-  bl    _find_
-  cmp   r1, #0
-  strne tos, [sp, #-4]!
-  movne tos, r0
-  blne  execute
+  ldr     r0, var_state
+  cmp     r0, #0
+  bne     _interpret__compile
+
+  ldr     r0, const_bl
+  bl      _word_
+  bl      _find_
+  cmp     r1, #0
+  strne   tos, [sp, #-4]!
+  movne   tos, r0
+  blne    execute
   
-  bl    _question_number_
-  cmp   r1, #0
-  strne tos, [sp, #-4]!
-  movne tos, r0
+  bl      _question_number_
+  cmp     r1, #0
+  strne   tos, [sp, #-4]!
+  movne   tos, r0
+  b       _interpret__exit
+
+_interpret__compile:
+  ldr     r0, const_bl
+  bl      _word_
+  bl      _find_
+  cmp     r1, #1  // Is immediate
+  streq   tos, [sp, #-4]!
+  moveq   tos, r0
+  bleq    execute
+  cmp     r1, #-1 // Check if not immediate
+  subeq   r0, r0, org // adjust execution token
+  bleq    _comma_
   
-  pop   lr, rp
-  bx    lr
+  bl      _question_number_
+  cmp     r1, #0
+  blne    _literal_
+
+_interpret__exit:
+  pop     lr, rp
+  bx      lr
 
 # Run-time semantics of LITERAL
 # Push the value at ip on the stack and increment ip by 4
@@ -1552,6 +1618,9 @@ defcode "(literal)",lit
   push    tos, sp
   ldr     tos, [ip], #4
   next
+
+# Just a constant holding the execution token of LIT
+defconst "__lit",__lit,lit+ORIGIN
 
 # Print the contents of the stack before the standard prompt
 # ( -- )
@@ -1624,9 +1693,9 @@ defcode "unhidden",unhidden
   mov     r0, tos
   pop     tos, sp
   mvn     r1, #0x40
-  ldr     r2, [r0, #4]
+  ldrb    r2, [r0, #4]
   and     r1, r1, r2
-  str     r1, [r0, #4]
+  strb    r1, [r0, #4]
   next
 
 # Last entry in Forth dictionary
