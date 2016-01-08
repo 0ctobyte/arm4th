@@ -623,39 +623,52 @@ defcode "_accept_",_accept_
   push    lr, rp
 
   mov     r7, r1 // addr
-  mov     r6, r0 // max count
-
-  movw    r0, #0
-  push    r0, rp       // character count
-  movw    r0, #0x08    // backspace
-  push    r0, rp
-  movw    r0, #0x0d    // carriage return
-  push    r0, rp
+  mov     r6, #0 // Character count
+  mov     r5, r0 // max count
+  push    r5, rp
 
 _accept__read_loop:
-  ldr     r1, [rp, #8]
-  cmp     r1, r6       // Reached max count?
+  ldr     r5, [rp]
+  cmp     r5, r6       // Reached max count?
   beq     _accept__exit
 
   bl      _key_
   bl      _emit_       // echo character
   
-  ldr     r1, [rp, #8] // character count
-  
-  ldr     r2, [rp]
-  cmp     r2, r0       // carriage return?
+  cmp     r0, #0x0d    // carriage return?
   beq     _accept__exit
 
-  ldr     r2, [rp, #4]
-  cmp     r2, r0       // backspace?
-  subeq   r7, r7, #1
-  subeq   r1, r1, #1
-  streq   r1, [rp, #8]
+#if BBB
+  cmp     r0, #0x08    // backspace?
+#else
+  cmp     r0, #0x7f    // delete?
+#endif
+  bne     _accept__accept_char
+
+  # Don't backspace if character count == 0
+  cmp     r6, #0
   beq     _accept__read_loop
+
+  # Emit ANSI escape control sequence to delete character: ESC + [ + K
+#if !BBB
+  movw    r0, #0x08
+  bl      _emit_
+#endif
+  movw    r0, #0x1b
+  bl      _emit_
+  movw    r0, #0x5b
+  bl      _emit_
+  movw    r0, #0x4b
+  bl      _emit_
+
+  # Finally decrement character count and pointer
+  sub     r7, r7, #1
+  sub     r6, r6, #1
+  b       _accept__read_loop
  
+_accept__accept_char:
   # Otherwise, store character in buffer and increment count
-  add     r1, r1, #1
-  str     r1, [rp, #8]
+  add     r6, r6, #1
   strb    r0, [r7], #1
   b       _accept__read_loop
 
@@ -664,10 +677,8 @@ _accept__exit:
   movw    r0, #0x0a
   bl      _emit_
 
-  pop     r0, rp
-  pop     r0, rp
-  pop     r0, rp
-
+  mov     r0, r6
+  pop     r1, rp
   pop     lr, rp
   bx      lr
 
