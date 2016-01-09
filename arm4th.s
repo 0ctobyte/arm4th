@@ -633,9 +633,9 @@ _accept__read_loop:
   beq     _accept__exit
 
   bl      _key_
-  bl      _emit_       // echo character
   
   cmp     r0, #0x0d    // carriage return?
+  bleq    _emit_       // echo character
   beq     _accept__exit
 
 #if BBB
@@ -650,10 +650,8 @@ _accept__read_loop:
   beq     _accept__read_loop
 
   # Emit ANSI escape control sequence to delete character: ESC + [ + K
-#if !BBB
   movw    r0, #0x08
   bl      _emit_
-#endif
   movw    r0, #0x1b
   bl      _emit_
   movw    r0, #0x5b
@@ -670,6 +668,7 @@ _accept__accept_char:
   # Otherwise, store character in buffer and increment count
   add     r6, r6, #1
   strb    r0, [r7], #1
+  bl      _emit_       // echo character
   b       _accept__read_loop
 
 _accept__exit:
