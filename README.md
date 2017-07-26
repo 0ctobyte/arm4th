@@ -12,13 +12,13 @@ You will need the `arm-none-eabi-gcc` package as well as `qemu` installed on you
 
 `make`
 
+or alternatively, to build for the BeagleBone:
+
+`make BBB=1`
+
 The arm-none-eabi-gcc package must be in your `PATH`.
 The `make` command will produce the binary image file `arm4th.bin`
 
 # Usage
 To run the arm4th binary on qemu:
 `./emulator -nogdb`
-
-You should see a Forth prompt ('OK') and you will be able to type stuff in, but it doesn't do anything yet with
-user input...
-
